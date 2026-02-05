@@ -4,11 +4,14 @@ import (
 	"fmt"
 	"os"
 	"os/signal"
+	"path/filepath"
 	"regexp"
 	"strings"
+	"sync"
 	"syscall"
 	"time"
 
+	"github.com/fsnotify/fsnotify"
 	"github.com/go-idp/dns/cmd/dns/config"
 	"github.com/go-zoox/cli"
 	"github.com/go-zoox/dns"
@@ -165,6 +168,68 @@ func lookupSystemHosts(entries []SystemHostsEntry, domain string, queryType int)
 
 	logger.Debug("No match found for domain: %s", domain)
 	return "", fmt.Errorf("not found")
+}
+
+// watchSystemHostsFile watches for changes to the system hosts file and reloads it automatically
+func watchSystemHostsFile(filePath string, entries *[]SystemHostsEntry, mutex *sync.RWMutex) {
+	watcher, err := fsnotify.NewWatcher()
+	if err != nil {
+		logger.Warn("Failed to create file watcher for hosts file: %v", err)
+		return
+	}
+	defer watcher.Close()
+
+	// Watch the directory containing the hosts file
+	dir := filepath.Dir(filePath)
+	if err := watcher.Add(dir); err != nil {
+		logger.Warn("Failed to watch directory %s for hosts file changes: %v", dir, err)
+		return
+	}
+
+	logger.Info("Watching system hosts file %s for changes", filePath)
+
+	for {
+		select {
+		case event, ok := <-watcher.Events:
+			if !ok {
+				return
+			}
+			// Check if the event is for our hosts file
+			if event.Name == filePath {
+				// Handle different event types
+				if event.Op&fsnotify.Write == fsnotify.Write || event.Op&fsnotify.Create == fsnotify.Create {
+					logger.Info("System hosts file %s changed, reloading...", filePath)
+					
+					// Small delay to ensure file write is complete
+					time.Sleep(100 * time.Millisecond)
+					
+					// Reload hosts file
+					newEntries, err := parseSystemHostsFile(filePath)
+					if err != nil {
+						logger.Warn("Failed to reload system hosts file %s: %v", filePath, err)
+						continue
+					}
+					
+					// Update entries with lock
+					mutex.Lock()
+					*entries = newEntries
+					mutex.Unlock()
+					
+					logger.Info("Reloaded system hosts file: %s (%d entries)", filePath, len(newEntries))
+				} else if event.Op&fsnotify.Remove == fsnotify.Remove {
+					logger.Warn("System hosts file %s was removed", filePath)
+					mutex.Lock()
+					*entries = []SystemHostsEntry{}
+					mutex.Unlock()
+				}
+			}
+		case err, ok := <-watcher.Errors:
+			if !ok {
+				return
+			}
+			logger.Warn("File watcher error for hosts file: %v", err)
+		}
+	}
 }
 
 // NewServerCommand creates a new server command
@@ -343,8 +408,9 @@ func NewServerCommand() *cli.Command {
 
 			// Initialize system hosts file parser (enabled by default unless disabled)
 			var systemHostsEntries []SystemHostsEntry
+			var systemHostsMutex sync.RWMutex
 			if !disableSystemHosts {
-				// Use custom parser (supports wildcard and regex)
+				// Load initial hosts file
 				entries, err := parseSystemHostsFile(systemHostsFile)
 				if err != nil {
 					logger.Warn("Failed to load system hosts file %s: %v", systemHostsFile, err)
@@ -359,6 +425,9 @@ func NewServerCommand() *cli.Command {
 						}
 					}
 				}
+
+				// Watch for hosts file changes and reload automatically
+				go watchSystemHostsFile(systemHostsFile, &systemHostsEntries, &systemHostsMutex)
 			}
 
 			// Set up handler with three-tier priority:
@@ -386,9 +455,13 @@ func NewServerCommand() *cli.Command {
 				}
 
 				// Priority 2: Check system hosts file (if enabled)
-				if len(systemHostsEntries) > 0 {
-					logger.Debug("Checking system hosts for %s (%s), total entries: %d", hostname, queryType, len(systemHostsEntries))
-					ip, err := lookupSystemHosts(systemHostsEntries, hostname, typ)
+				systemHostsMutex.RLock()
+				entries := systemHostsEntries
+				systemHostsMutex.RUnlock()
+				
+				if len(entries) > 0 {
+					logger.Debug("Checking system hosts for %s (%s), total entries: %d", hostname, queryType, len(entries))
+					ip, err := lookupSystemHosts(entries, hostname, typ)
 					if err == nil && ip != "" {
 						logger.Info("[channel: system.hosts] Resolved %s (%s) from system hosts -> %v", hostname, queryType, []string{ip})
 						return []string{ip}, nil
