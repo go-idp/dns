@@ -9,6 +9,8 @@ DNS CLI is a command-line tool for DNS operations:
 - **DNS Client**: Query DNS servers using various protocols (Plain DNS, DoT, DoH, DoQ, DNSCrypt)
 - **DNS Server**: Run your own DNS server with custom host mappings, wildcard patterns, and regex support
 - **DNS-over-TLS (DoT)**: Secure DNS queries and server support
+- **DNS-over-HTTPS (DoH)**: Encrypted DNS over HTTPS protocol
+- **DNS-over-QUIC (DoQ)**: Low-latency encrypted DNS over QUIC protocol
 - **Flexible Configuration**: YAML-based configuration with command-line flag overrides
 
 ## Key Features
@@ -26,6 +28,8 @@ DNS CLI is a command-line tool for DNS operations:
 - System hosts file integration
 - Upstream DNS server fallback
 - DNS-over-TLS (DoT) support
+- DNS-over-HTTPS (DoH) support
+- DNS-over-QUIC (DoQ) support
 - YAML configuration file support
 
 ## Use Cases
@@ -42,3 +46,6 @@ DNS CLI is a command-line tool for DNS operations:
 - [Quick Start](/guide/quick-start) - Get started in minutes
 - [Client Usage](/guide/client) - Learn how to use the DNS client
 - [Server Usage](/guide/server) - Learn how to run a DNS server
+- [DNS-over-TLS (DoT)](/guide/dot) - Learn about DoT protocol
+- [DNS-over-HTTPS (DoH)](/guide/doh) - Learn about DoH protocol
+- [DNS-over-QUIC (DoQ)](/guide/doq) - Learn about DoQ protocol

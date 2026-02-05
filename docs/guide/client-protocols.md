@@ -106,4 +106,7 @@ dns client --domain example.com --server sdns://AQcAAAAAAAAAAAAQ1syXTkwLjE3OC4xN
 ## Next Steps
 
 - [Client Usage](/guide/client) - Learn more about using the DNS client
+- [DNS-over-TLS (DoT)](/guide/dot) - Detailed DoT guide
+- [DNS-over-HTTPS (DoH)](/guide/doh) - Detailed DoH guide
+- [DNS-over-QUIC (DoQ)](/guide/doq) - Detailed DoQ guide
 - [Server Usage](/guide/server) - Learn how to run a DNS server

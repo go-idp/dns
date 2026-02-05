@@ -190,6 +190,7 @@ dns server --config config.yaml
 ## Next Steps
 
 - [Configuration](/guide/configuration) - Learn about configuration options
-- [DNS-over-TLS](/guide/dot) - Learn about DoT server setup
+- [DNS-over-TLS (DoT)](/guide/dot) - Learn about DoT server setup
+- [DNS-over-HTTPS (DoH)](/guide/doh) - Learn about DoH server setup
+- [DNS-over-QUIC (DoQ)](/guide/doq) - Learn about DoQ server setup
 - [Examples](/examples/) - See more examples
-- [DoH and DoQ Client Examples](/examples/doh-doq-client) - Learn about DoH and DoQ client usage

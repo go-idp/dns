@@ -123,4 +123,7 @@ echo "IP address: $IP"
 ## Next Steps
 
 - [Supported Protocols](/guide/client-protocols) - Learn about all supported DNS protocols
+- [DNS-over-TLS (DoT)](/guide/dot) - Learn about DoT protocol
+- [DNS-over-HTTPS (DoH)](/guide/doh) - Learn about DoH protocol
+- [DNS-over-QUIC (DoQ)](/guide/doq) - Learn about DoQ protocol
 - [Server Usage](/guide/server) - Learn how to run a DNS server
