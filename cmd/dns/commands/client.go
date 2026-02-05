@@ -2,6 +2,7 @@ package commands
 
 import (
 	"fmt"
+	"net"
 	"os"
 	"strings"
 	"time"
@@ -11,6 +12,43 @@ import (
 	"github.com/go-zoox/dns/client"
 	"github.com/go-zoox/dns/constants"
 )
+
+// normalizeServerAddress normalizes a DNS server address by adding default port if missing
+// Supports formats like:
+//   - "127.0.0.1:5553" -> "127.0.0.1:5553" (unchanged)
+//   - "127.0.0.1" -> "127.0.0.1:53" (adds default port)
+//   - "tls://1.1.1.1" -> "tls://1.1.1.1" (protocol prefix, unchanged)
+//   - "tls://1.1.1.1:853" -> "tls://1.1.1.1:853" (protocol with port, unchanged)
+func normalizeServerAddress(server string) string {
+	// Check if it's a protocol-prefixed address (tls://, https://, etc.)
+	if strings.Contains(server, "://") {
+		// For protocol-prefixed addresses, check if port is already specified
+		parts := strings.Split(server, "://")
+		if len(parts) != 2 {
+			return server
+		}
+		address := parts[1]
+		
+		// Check if address already has a port
+		if _, _, err := net.SplitHostPort(address); err == nil {
+			// Port already specified
+			return server
+		}
+		
+		// No port specified, but protocol-prefixed addresses usually have default ports
+		// For now, return as-is and let the DNS library handle it
+		return server
+	}
+	
+	// For plain addresses, check if port is already specified
+	if _, _, err := net.SplitHostPort(server); err == nil {
+		// Port already specified
+		return server
+	}
+	
+	// No port specified, add default DNS port 53
+	return net.JoinHostPort(server, "53")
+}
 
 // NewClientCommand creates a new client command
 func NewClientCommand() *cli.Command {
@@ -69,9 +107,15 @@ func NewClientCommand() *cli.Command {
 				servers = []string{"114.114.114.114:53"}
 			}
 
+			// Normalize server addresses (add default port :53 if not specified)
+			normalizedServers := make([]string, len(servers))
+			for i, server := range servers {
+				normalizedServers[i] = normalizeServerAddress(server)
+			}
+
 			// Create DNS client
 			dnsClient := dns.NewClient(&dns.ClientOptions{
-				Servers: servers,
+				Servers: normalizedServers,
 				Timeout: timeout,
 			})
 

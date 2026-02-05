@@ -10,11 +10,11 @@ import (
 
 // Config represents the DNS server configuration
 type Config struct {
-	Server     ServerConfig     `yaml:"server"`
-	DoT        DoTConfig        `yaml:"dot"`
-	Hosts      HostsConfig      `yaml:"hosts"`
+	Server      ServerConfig      `yaml:"server"`
+	DoT         DoTConfig         `yaml:"dot"`
+	Hosts       HostsConfig       `yaml:"hosts"`
 	SystemHosts SystemHostsConfig `yaml:"system_hosts"`
-	Upstream   UpstreamConfig   `yaml:"upstream"`
+	Upstream    UpstreamConfig    `yaml:"upstream"`
 }
 
 // ServerConfig represents basic server settings
@@ -26,8 +26,8 @@ type ServerConfig struct {
 
 // DoTConfig represents DNS-over-TLS configuration
 type DoTConfig struct {
-	Enabled bool     `yaml:"enabled"`
-	Port    int      `yaml:"port"`
+	Enabled bool      `yaml:"enabled"`
+	Port    int       `yaml:"port"`
 	TLS     TLSConfig `yaml:"tls"`
 }
 
@@ -94,7 +94,7 @@ func LoadConfig(filePath string) (*Config, error) {
 	if len(config.Upstream.Servers) == 0 {
 		config.Upstream.Servers = []string{"114.114.114.114:53"}
 	}
-	
+
 	// Set default system hosts file path if enabled but not specified
 	if config.SystemHosts.Enabled && config.SystemHosts.FilePath == "" {
 		config.SystemHosts.FilePath = "/etc/hosts"
@@ -175,7 +175,7 @@ func (c *Config) LookupHost(domain string, queryType int) ([]string, error) {
 	}
 
 	domain = strings.ToLower(strings.TrimSpace(domain))
-	
+
 	// Try exact match first
 	if mapping, ok := hosts[domain]; ok {
 		if queryType == 4 { // A record
