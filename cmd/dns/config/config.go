@@ -10,10 +10,11 @@ import (
 
 // Config represents the DNS server configuration
 type Config struct {
-	Server   ServerConfig   `yaml:"server"`
-	DoT      DoTConfig      `yaml:"dot"`
-	Hosts    HostsConfig    `yaml:"hosts"`
-	Upstream UpstreamConfig `yaml:"upstream"`
+	Server     ServerConfig     `yaml:"server"`
+	DoT        DoTConfig        `yaml:"dot"`
+	Hosts      HostsConfig      `yaml:"hosts"`
+	SystemHosts SystemHostsConfig `yaml:"system_hosts"`
+	Upstream   UpstreamConfig   `yaml:"upstream"`
 }
 
 // ServerConfig represents basic server settings
@@ -48,6 +49,12 @@ type HostMapping struct {
 	Domain string
 	IPv4   []string
 	IPv6   []string
+}
+
+// SystemHostsConfig represents system hosts file configuration
+type SystemHostsConfig struct {
+	Enabled  bool   `yaml:"enabled"`
+	FilePath string `yaml:"file_path"`
 }
 
 // UpstreamConfig represents upstream DNS servers configuration
@@ -86,6 +93,11 @@ func LoadConfig(filePath string) (*Config, error) {
 	}
 	if len(config.Upstream.Servers) == 0 {
 		config.Upstream.Servers = []string{"114.114.114.114:53"}
+	}
+	
+	// Set default system hosts file path if enabled but not specified
+	if config.SystemHosts.Enabled && config.SystemHosts.FilePath == "" {
+		config.SystemHosts.FilePath = "/etc/hosts"
 	}
 
 	return &config, nil

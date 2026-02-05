@@ -15,8 +15,8 @@ dot:
     cert: "/path/to/cert.pem"    # TLS certificate file path (required if DoT enabled)
     key: "/path/to/key.pem"      # TLS private key file path (required if DoT enabled)
 
-# Custom domain mappings (highest priority, checked before upstream DNS)
-# These mappings take precedence over upstream DNS servers
+# Custom domain mappings (highest priority, checked before system hosts and upstream DNS)
+# These mappings take precedence over system hosts file and upstream DNS servers
 hosts:
   # Simple format: single domain to single IP
   "example.com": "1.2.3.4"
@@ -43,7 +43,14 @@ hosts:
   "api.example.com": "10.0.0.1"
   "db.example.com": "10.0.0.2"
 
-# Upstream DNS servers (used when custom hosts don't match)
+# System hosts file configuration (second priority, after config hosts)
+# When enabled, the system hosts file (e.g., /etc/hosts) will be checked
+# before falling back to upstream DNS servers
+system_hosts:
+  enabled: false              # Enable system hosts file lookup (default: false)
+  file_path: "/etc/hosts"     # Path to hosts file (default: /etc/hosts when enabled)
+
+# Upstream DNS servers (used when custom hosts and system hosts don't match)
 upstream:
   servers:
     - "114.114.114.114:53"    # Plain DNS

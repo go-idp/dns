@@ -11,6 +11,7 @@ import (
 	"github.com/go-zoox/cli"
 	"github.com/go-zoox/dns"
 	"github.com/go-zoox/dns/client"
+	"github.com/go-zoox/fs/type/hosts"
 	"github.com/go-zoox/logger"
 )
 
@@ -167,18 +168,42 @@ func NewServerCommand() *cli.Command {
 
 			server := dns.NewServer(serverOptions)
 
-			// Set up handler
+			// Initialize system hosts file parser if enabled
+			var systemHosts *hosts.Hosts
+			if cfg != nil && cfg.SystemHosts.Enabled {
+				systemHosts = hosts.New(cfg.SystemHosts.FilePath)
+				if err := systemHosts.Load(); err != nil {
+					logger.Warn("Failed to load system hosts file %s: %v", cfg.SystemHosts.FilePath, err)
+					systemHosts = nil
+				} else {
+					logger.Info("Loaded system hosts file: %s", cfg.SystemHosts.FilePath)
+				}
+			}
+
+			// Set up handler with three-tier priority:
+			// 1. Configuration hosts (highest priority)
+			// 2. System /etc/hosts file (if enabled)
+			// 3. Upstream DNS servers
 			server.Handle(func(hostname string, typ int) ([]string, error) {
-				// First, check custom hosts mapping (highest priority)
+				// Priority 1: Check configuration hosts mapping
 				if cfg != nil {
 					ips, err := cfg.LookupHost(hostname, typ)
 					if err == nil && len(ips) > 0 {
-						logger.Info("Resolved %s (%d) from hosts -> %v", hostname, typ, ips)
+						logger.Info("Resolved %s (%d) from config hosts -> %v", hostname, typ, ips)
 						return ips, nil
 					}
 				}
 
-				// Fallback to upstream DNS servers
+				// Priority 2: Check system hosts file (if enabled)
+				if systemHosts != nil {
+					ip, err := systemHosts.LookUp(hostname, typ)
+					if err == nil && ip != "" {
+						logger.Info("Resolved %s (%d) from system hosts -> %v", hostname, typ, []string{ip})
+						return []string{ip}, nil
+					}
+				}
+
+				// Priority 3: Fallback to upstream DNS servers
 				ips, err := upstreamClient.LookUp(hostname, &client.LookUpOptions{
 					Typ: typ,
 				})

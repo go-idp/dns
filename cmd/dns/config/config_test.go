@@ -481,3 +481,109 @@ func TestParseHosts_WhitespaceHandling(t *testing.T) {
 		t.Error("example.com not found after trimming")
 	}
 }
+
+func TestLoadConfig_SystemHosts_Disabled(t *testing.T) {
+	tmpDir := t.TempDir()
+	configFile := filepath.Join(tmpDir, "test.yaml")
+
+	configContent := `
+server:
+  port: 53
+system_hosts:
+  enabled: false
+`
+
+	if err := os.WriteFile(configFile, []byte(configContent), 0644); err != nil {
+		t.Fatalf("Failed to write config file: %v", err)
+	}
+
+	cfg, err := LoadConfig(configFile)
+	if err != nil {
+		t.Fatalf("Failed to load config: %v", err)
+	}
+
+	if cfg.SystemHosts.Enabled {
+		t.Error("Expected system hosts to be disabled")
+	}
+}
+
+func TestLoadConfig_SystemHosts_Enabled(t *testing.T) {
+	tmpDir := t.TempDir()
+	configFile := filepath.Join(tmpDir, "test.yaml")
+
+	configContent := `
+server:
+  port: 53
+system_hosts:
+  enabled: true
+  file_path: "/custom/path/hosts"
+`
+
+	if err := os.WriteFile(configFile, []byte(configContent), 0644); err != nil {
+		t.Fatalf("Failed to write config file: %v", err)
+	}
+
+	cfg, err := LoadConfig(configFile)
+	if err != nil {
+		t.Fatalf("Failed to load config: %v", err)
+	}
+
+	if !cfg.SystemHosts.Enabled {
+		t.Error("Expected system hosts to be enabled")
+	}
+	if cfg.SystemHosts.FilePath != "/custom/path/hosts" {
+		t.Errorf("Expected file path /custom/path/hosts, got %s", cfg.SystemHosts.FilePath)
+	}
+}
+
+func TestLoadConfig_SystemHosts_DefaultPath(t *testing.T) {
+	tmpDir := t.TempDir()
+	configFile := filepath.Join(tmpDir, "test.yaml")
+
+	configContent := `
+server:
+  port: 53
+system_hosts:
+  enabled: true
+`
+
+	if err := os.WriteFile(configFile, []byte(configContent), 0644); err != nil {
+		t.Fatalf("Failed to write config file: %v", err)
+	}
+
+	cfg, err := LoadConfig(configFile)
+	if err != nil {
+		t.Fatalf("Failed to load config: %v", err)
+	}
+
+	if !cfg.SystemHosts.Enabled {
+		t.Error("Expected system hosts to be enabled")
+	}
+	if cfg.SystemHosts.FilePath != "/etc/hosts" {
+		t.Errorf("Expected default file path /etc/hosts, got %s", cfg.SystemHosts.FilePath)
+	}
+}
+
+func TestLoadConfig_SystemHosts_NotSpecified(t *testing.T) {
+	tmpDir := t.TempDir()
+	configFile := filepath.Join(tmpDir, "test.yaml")
+
+	configContent := `
+server:
+  port: 53
+`
+
+	if err := os.WriteFile(configFile, []byte(configContent), 0644); err != nil {
+		t.Fatalf("Failed to write config file: %v", err)
+	}
+
+	cfg, err := LoadConfig(configFile)
+	if err != nil {
+		t.Fatalf("Failed to load config: %v", err)
+	}
+
+	// System hosts should be disabled by default
+	if cfg.SystemHosts.Enabled {
+		t.Error("Expected system hosts to be disabled by default")
+	}
+}

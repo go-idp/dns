@@ -12,6 +12,11 @@ hosts:
     - "192.168.1.101"
     - "192.168.1.102"
 
+# System hosts file configuration
+system_hosts:
+  enabled: false
+  file_path: "/etc/hosts"
+
 # Upstream DNS servers
 upstream:
   servers:
