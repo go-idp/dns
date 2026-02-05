@@ -1,5 +1,5 @@
 # Builder
-FROM --platform=$BUILDPLATFORM whatwewant/builder-go:v1.22-1 as builder
+FROM --platform=$BUILDPLATFORM whatwewant/builder-go:v1.22-1 AS builder
 
 WORKDIR /build
 
@@ -20,30 +20,12 @@ RUN CGO_ENABLED=0 \
   -v -o dns ./cmd/dns
 
 # Server
-FROM whatwewant/zmicro:v1.24
+FROM whatwewant/alpine:v3-1
 
 LABEL MAINTAINER="Zero<tobewhatwewant@gmail.com>"
 
 LABEL org.opencontainers.image.source="https://github.com/go-idp/dns"
 
-RUN zmicro update -a
-
-RUN apt update -y && apt install -y openssh-client vim
-
-RUN zmicro package install docker
-
-RUN zmicro package install docker-compose
-
-RUN zmicro package install kubectl
-
-RUN zmicro package install helm
-
-RUN zmicro package install gzcaas
-
-ARG VERSION=latest
-
-ENV VERSION=${VERSION}
-
 COPY --from=builder /build/dns /bin
 
-CMD dns server
+CMD /bin/dns server
