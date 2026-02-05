@@ -14,7 +14,7 @@ hosts:
 
 # System hosts file configuration
 system_hosts:
-  enabled: false
+  disabled: false             # Enabled by default
   file_path: "/etc/hosts"
 
 # Upstream DNS servers

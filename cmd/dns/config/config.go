@@ -53,7 +53,7 @@ type HostMapping struct {
 
 // SystemHostsConfig represents system hosts file configuration
 type SystemHostsConfig struct {
-	Enabled  bool   `yaml:"enabled"`
+	Disabled bool   `yaml:"disabled"`
 	FilePath string `yaml:"file_path"`
 }
 
@@ -95,8 +95,8 @@ func LoadConfig(filePath string) (*Config, error) {
 		config.Upstream.Servers = []string{"114.114.114.114:53"}
 	}
 
-	// Set default system hosts file path if enabled but not specified
-	if config.SystemHosts.Enabled && config.SystemHosts.FilePath == "" {
+	// Set default system hosts file path if not disabled and not specified
+	if !config.SystemHosts.Disabled && config.SystemHosts.FilePath == "" {
 		config.SystemHosts.FilePath = "/etc/hosts"
 	}
 

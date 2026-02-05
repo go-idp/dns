@@ -490,7 +490,7 @@ func TestLoadConfig_SystemHosts_Disabled(t *testing.T) {
 server:
   port: 53
 system_hosts:
-  enabled: false
+  disabled: true
 `
 
 	if err := os.WriteFile(configFile, []byte(configContent), 0644); err != nil {
@@ -502,7 +502,7 @@ system_hosts:
 		t.Fatalf("Failed to load config: %v", err)
 	}
 
-	if cfg.SystemHosts.Enabled {
+	if !cfg.SystemHosts.Disabled {
 		t.Error("Expected system hosts to be disabled")
 	}
 }
@@ -515,7 +515,7 @@ func TestLoadConfig_SystemHosts_Enabled(t *testing.T) {
 server:
   port: 53
 system_hosts:
-  enabled: true
+  disabled: false
   file_path: "/custom/path/hosts"
 `
 
@@ -528,7 +528,7 @@ system_hosts:
 		t.Fatalf("Failed to load config: %v", err)
 	}
 
-	if !cfg.SystemHosts.Enabled {
+	if cfg.SystemHosts.Disabled {
 		t.Error("Expected system hosts to be enabled")
 	}
 	if cfg.SystemHosts.FilePath != "/custom/path/hosts" {
@@ -544,7 +544,7 @@ func TestLoadConfig_SystemHosts_DefaultPath(t *testing.T) {
 server:
   port: 53
 system_hosts:
-  enabled: true
+  disabled: false
 `
 
 	if err := os.WriteFile(configFile, []byte(configContent), 0644); err != nil {
@@ -556,7 +556,7 @@ system_hosts:
 		t.Fatalf("Failed to load config: %v", err)
 	}
 
-	if !cfg.SystemHosts.Enabled {
+	if cfg.SystemHosts.Disabled {
 		t.Error("Expected system hosts to be enabled")
 	}
 	if cfg.SystemHosts.FilePath != "/etc/hosts" {
@@ -582,8 +582,11 @@ server:
 		t.Fatalf("Failed to load config: %v", err)
 	}
 
-	// System hosts should be disabled by default
-	if cfg.SystemHosts.Enabled {
-		t.Error("Expected system hosts to be disabled by default")
+	// System hosts should be enabled by default (disabled = false)
+	if cfg.SystemHosts.Disabled {
+		t.Error("Expected system hosts to be enabled by default")
+	}
+	if cfg.SystemHosts.FilePath != "/etc/hosts" {
+		t.Errorf("Expected default file path /etc/hosts, got %s", cfg.SystemHosts.FilePath)
 	}
 }

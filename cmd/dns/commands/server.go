@@ -74,9 +74,9 @@ func NewServerCommand() *cli.Command {
 				EnvVars: []string{"DNS_UPSTREAM"},
 			},
 			&cli.BoolFlag{
-				Name:    "system-hosts",
-				Usage:   "Enable system hosts file lookup (e.g., /etc/hosts)",
-				EnvVars: []string{"DNS_SYSTEM_HOSTS"},
+				Name:    "disable-system-hosts",
+				Usage:   "Disable system hosts file lookup (enabled by default)",
+				EnvVars: []string{"DNS_DISABLE_SYSTEM_HOSTS"},
 			},
 			&cli.StringFlag{
 				Name:    "system-hosts-file",
@@ -108,7 +108,7 @@ func NewServerCommand() *cli.Command {
 			tlsCert := ctx.String("tls-cert")
 			tlsKey := ctx.String("tls-key")
 			upstreams := ctx.StringSlice("upstream")
-			enableSystemHosts := ctx.Bool("system-hosts")
+			disableSystemHosts := ctx.Bool("disable-system-hosts")
 			systemHostsFile := ctx.String("system-hosts-file")
 
 			// Merge config file values if config was loaded
@@ -138,8 +138,9 @@ func NewServerCommand() *cli.Command {
 					upstreams = cfg.Upstream.Servers
 				}
 				// Merge system hosts config (CLI flags override config)
-				if !enableSystemHosts && cfg.SystemHosts.Enabled {
-					enableSystemHosts = cfg.SystemHosts.Enabled
+				// System hosts is enabled by default, unless explicitly disabled
+				if !disableSystemHosts && cfg.SystemHosts.Disabled {
+					disableSystemHosts = cfg.SystemHosts.Disabled
 				}
 				if systemHostsFile == "/etc/hosts" && cfg.SystemHosts.FilePath != "" {
 					systemHostsFile = cfg.SystemHosts.FilePath
@@ -188,9 +189,9 @@ func NewServerCommand() *cli.Command {
 
 			server := dns.NewServer(serverOptions)
 
-			// Initialize system hosts file parser if enabled
+			// Initialize system hosts file parser (enabled by default unless disabled)
 			var systemHosts *hosts.Hosts
-			if enableSystemHosts {
+			if !disableSystemHosts {
 				systemHosts = hosts.New(systemHostsFile)
 				if err := systemHosts.Load(); err != nil {
 					logger.Warn("Failed to load system hosts file %s: %v", systemHostsFile, err)

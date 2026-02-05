@@ -44,11 +44,11 @@ hosts:
   "db.example.com": "10.0.0.2"
 
 # System hosts file configuration (second priority, after config hosts)
-# When enabled, the system hosts file (e.g., /etc/hosts) will be checked
-# before falling back to upstream DNS servers
+# System hosts file lookup is enabled by default
+# The system hosts file (e.g., /etc/hosts) will be checked before falling back to upstream DNS servers
 system_hosts:
-  enabled: false              # Enable system hosts file lookup (default: false)
-  file_path: "/etc/hosts"     # Path to hosts file (default: /etc/hosts when enabled)
+  disabled: false             # Disable system hosts file lookup (default: false, i.e., enabled by default)
+  file_path: "/etc/hosts"     # Path to hosts file (default: /etc/hosts)
 
 # Upstream DNS servers (used when custom hosts and system hosts don't match)
 upstream:

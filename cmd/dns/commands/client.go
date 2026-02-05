@@ -28,24 +28,24 @@ func normalizeServerAddress(server string) string {
 			return server
 		}
 		address := parts[1]
-		
+
 		// Check if address already has a port
 		if _, _, err := net.SplitHostPort(address); err == nil {
 			// Port already specified
 			return server
 		}
-		
+
 		// No port specified, but protocol-prefixed addresses usually have default ports
 		// For now, return as-is and let the DNS library handle it
 		return server
 	}
-	
+
 	// For plain addresses, check if port is already specified
 	if _, _, err := net.SplitHostPort(server); err == nil {
 		// Port already specified
 		return server
 	}
-	
+
 	// No port specified, add default DNS port 53
 	return net.JoinHostPort(server, "53")
 }
