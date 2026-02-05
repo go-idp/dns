@@ -170,6 +170,28 @@ func lookupSystemHosts(entries []SystemHostsEntry, domain string, queryType int)
 	return "", fmt.Errorf("not found")
 }
 
+// reloadSystemHostsFile reloads the system hosts file and updates entries
+func reloadSystemHostsFile(filePath string, entries *[]SystemHostsEntry, mutex *sync.RWMutex) {
+	// Small delay to ensure file write is complete
+	time.Sleep(200 * time.Millisecond)
+	
+	// Reload hosts file
+	newEntries, err := parseSystemHostsFile(filePath)
+	if err != nil {
+		logger.Warn("Failed to reload system hosts file %s: %v", filePath, err)
+		return
+	}
+	
+	// Update entries with lock
+	mutex.Lock()
+	oldCount := len(*entries)
+	*entries = newEntries
+	newCount := len(newEntries)
+	mutex.Unlock()
+	
+	logger.Info("Successfully reloaded system hosts file: %s (entries: %d -> %d)", filePath, oldCount, newCount)
+}
+
 // watchSystemHostsFile watches for changes to the system hosts file and reloads it automatically
 func watchSystemHostsFile(filePath string, entries *[]SystemHostsEntry, mutex *sync.RWMutex) {
 	watcher, err := fsnotify.NewWatcher()
@@ -183,7 +205,7 @@ func watchSystemHostsFile(filePath string, entries *[]SystemHostsEntry, mutex *s
 	// Some systems require watching the directory instead of the file directly
 	dir := filepath.Dir(filePath)
 	fileName := filepath.Base(filePath)
-	
+
 	// Try to watch the file directly first
 	if err := watcher.Add(filePath); err != nil {
 		logger.Debug("Cannot watch file directly, watching directory instead: %v", err)
@@ -203,55 +225,44 @@ func watchSystemHostsFile(filePath string, entries *[]SystemHostsEntry, mutex *s
 				logger.Warn("File watcher channel closed for hosts file")
 				return
 			}
-			
+
 			// Log all events for debugging
 			logger.Debug("File watcher event: %s, op: %v", event.Name, event.Op)
 			
 			// Check if the event is for our hosts file
 			// Compare both full path and filename (in case we're watching directory)
 			eventFileName := filepath.Base(event.Name)
-			if event.Name == filePath || eventFileName == fileName {
-				logger.Info("Detected change in system hosts file: %s (event: %v)", filePath, event.Op)
-				
+			isTargetFile := event.Name == filePath || eventFileName == fileName
+			
+			if isTargetFile {
 				// Handle different event types
-				if event.Op&fsnotify.Write == fsnotify.Write || event.Op&fsnotify.Create == fsnotify.Create {
-					logger.Info("System hosts file %s changed, reloading...", filePath)
-					
-					// Small delay to ensure file write is complete
-					time.Sleep(200 * time.Millisecond)
-					
-					// Reload hosts file
-					newEntries, err := parseSystemHostsFile(filePath)
-					if err != nil {
-						logger.Warn("Failed to reload system hosts file %s: %v", filePath, err)
-						continue
+				// Note: On some systems, file updates may trigger Rename events
+				// (when editors use atomic writes: create temp file, delete old, rename temp)
+				if event.Op&fsnotify.Write == fsnotify.Write {
+					logger.Info("Detected write event on system hosts file: %s", filePath)
+					reloadSystemHostsFile(filePath, entries, mutex)
+				} else if event.Op&fsnotify.Create == fsnotify.Create {
+					logger.Info("Detected create event on system hosts file: %s", filePath)
+					reloadSystemHostsFile(filePath, entries, mutex)
+				} else if event.Op&fsnotify.Rename == fsnotify.Rename {
+					// Rename event often occurs during file updates (atomic write pattern)
+					// Check if file still exists (might have been renamed back)
+					if _, err := os.Stat(filePath); err == nil {
+						logger.Info("Detected rename event on system hosts file: %s (file exists, reloading)", filePath)
+						reloadSystemHostsFile(filePath, entries, mutex)
+					} else {
+						logger.Warn("System hosts file %s was renamed and no longer exists", filePath)
+						mutex.Lock()
+						*entries = []SystemHostsEntry{}
+						mutex.Unlock()
+						logger.Info("Cleared system hosts entries due to file rename/removal")
 					}
-					
-					// Update entries with lock
-					mutex.Lock()
-					oldCount := len(*entries)
-					*entries = newEntries
-					newCount := len(newEntries)
-					mutex.Unlock()
-					
-					logger.Info("Successfully reloaded system hosts file: %s (entries: %d -> %d)", filePath, oldCount, newCount)
 				} else if event.Op&fsnotify.Remove == fsnotify.Remove {
 					logger.Warn("System hosts file %s was removed", filePath)
 					mutex.Lock()
 					*entries = []SystemHostsEntry{}
 					mutex.Unlock()
 					logger.Info("Cleared system hosts entries due to file removal")
-				} else if event.Op&fsnotify.Rename == fsnotify.Rename {
-					logger.Info("System hosts file %s was renamed, attempting to reload...", filePath)
-					// Try to reload after rename (file might have been moved back)
-					time.Sleep(200 * time.Millisecond)
-					newEntries, err := parseSystemHostsFile(filePath)
-					if err == nil {
-						mutex.Lock()
-						*entries = newEntries
-						mutex.Unlock()
-						logger.Info("Reloaded system hosts file after rename: %s (%d entries)", filePath, len(newEntries))
-					}
 				}
 			}
 		case err, ok := <-watcher.Errors:
