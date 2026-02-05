@@ -1,9 +1,12 @@
 package commands
 
 import (
+	"bufio"
 	"fmt"
 	"os"
 	"os/signal"
+	"regexp"
+	"strings"
 	"syscall"
 	"time"
 
@@ -11,9 +14,126 @@ import (
 	"github.com/go-zoox/cli"
 	"github.com/go-zoox/dns"
 	"github.com/go-zoox/dns/client"
-	"github.com/go-zoox/fs/type/hosts"
 	"github.com/go-zoox/logger"
 )
+
+// SystemHostsEntry represents an entry in the system hosts file
+type SystemHostsEntry struct {
+	IP         string
+	Domain     string
+	IsWildcard bool
+	IsRegex    bool
+	Regex      *regexp.Regexp
+}
+
+// parseSystemHostsFile parses a system hosts file with support for wildcard and regex patterns
+func parseSystemHostsFile(filePath string) ([]SystemHostsEntry, error) {
+	file, err := os.Open(filePath)
+	if err != nil {
+		return nil, err
+	}
+	defer file.Close()
+
+	var entries []SystemHostsEntry
+	scanner := bufio.NewScanner(file)
+
+	for scanner.Scan() {
+		line := strings.TrimSpace(scanner.Text())
+		
+		// Skip empty lines and comments
+		if line == "" || strings.HasPrefix(line, "#") {
+			continue
+		}
+
+		// Split by whitespace
+		fields := strings.Fields(line)
+		if len(fields) < 2 {
+			continue
+		}
+
+		ip := fields[0]
+		domains := fields[1:]
+
+		for _, domain := range domains {
+			domain = strings.TrimSpace(domain)
+			if domain == "" {
+				continue
+			}
+
+			// Check if it's a regex pattern (starts with ^)
+			isRegex := strings.HasPrefix(domain, "^")
+			// Check if it contains wildcard
+			isWildcard := strings.Contains(domain, "*")
+
+			entry := SystemHostsEntry{
+				IP:         ip,
+				Domain:     strings.ToLower(domain),
+				IsWildcard: isWildcard,
+				IsRegex:    isRegex,
+			}
+
+			// Compile regex if it's a regex pattern
+			if isRegex {
+				compiled, err := regexp.Compile(domain)
+				if err != nil {
+					logger.Warn("Invalid regex pattern in hosts file: %s, error: %v", domain, err)
+					continue
+				}
+				entry.Regex = compiled
+			}
+
+			entries = append(entries, entry)
+		}
+	}
+
+	if err := scanner.Err(); err != nil {
+		return nil, fmt.Errorf("error reading hosts file: %w", err)
+	}
+
+	return entries, nil
+}
+
+// lookupSystemHosts looks up a domain in system hosts entries with wildcard and regex support
+func lookupSystemHosts(entries []SystemHostsEntry, domain string, queryType int) (string, error) {
+	domain = strings.ToLower(strings.TrimSpace(domain))
+	domainNoDot := strings.TrimSuffix(domain, ".")
+
+	// First try exact matches
+	for _, entry := range entries {
+		if !entry.IsWildcard && !entry.IsRegex {
+			if entry.Domain == domain || entry.Domain == domainNoDot {
+				// Check if IP matches query type
+				if queryType == 4 && !config.IsIPv6(entry.IP) {
+					return entry.IP, nil
+				} else if queryType == 6 && config.IsIPv6(entry.IP) {
+					return entry.IP, nil
+				}
+			}
+		}
+	}
+
+	// Then try wildcard and regex patterns
+	for _, entry := range entries {
+		var matched bool
+
+		if entry.IsRegex && entry.Regex != nil {
+			matched = entry.Regex.MatchString(domain) || entry.Regex.MatchString(domainNoDot)
+		} else if entry.IsWildcard {
+			matched = config.MatchWildcard(domain, entry.Domain) || config.MatchWildcard(domainNoDot, entry.Domain)
+		}
+
+		if matched {
+			// Check if IP matches query type
+			if queryType == 4 && !config.IsIPv6(entry.IP) {
+				return entry.IP, nil
+			} else if queryType == 6 && config.IsIPv6(entry.IP) {
+				return entry.IP, nil
+			}
+		}
+	}
+
+	return "", fmt.Errorf("not found")
+}
 
 // NewServerCommand creates a new server command
 func NewServerCommand() *cli.Command {
@@ -190,14 +310,16 @@ func NewServerCommand() *cli.Command {
 			server := dns.NewServer(serverOptions)
 
 			// Initialize system hosts file parser (enabled by default unless disabled)
-			var systemHosts *hosts.Hosts
+			var systemHostsEntries []SystemHostsEntry
 			if !disableSystemHosts {
-				systemHosts = hosts.New(systemHostsFile)
-				if err := systemHosts.Load(); err != nil {
+				// Use custom parser (supports wildcard and regex)
+				entries, err := parseSystemHostsFile(systemHostsFile)
+				if err != nil {
 					logger.Warn("Failed to load system hosts file %s: %v", systemHostsFile, err)
-					systemHosts = nil
+					systemHostsEntries = []SystemHostsEntry{}
 				} else {
-					logger.Info("Loaded system hosts file: %s", systemHostsFile)
+					systemHostsEntries = entries
+					logger.Info("Loaded system hosts file: %s (with wildcard/regex support, %d entries)", systemHostsFile, len(entries))
 				}
 			}
 
@@ -226,8 +348,8 @@ func NewServerCommand() *cli.Command {
 				}
 
 				// Priority 2: Check system hosts file (if enabled)
-				if systemHosts != nil {
-					ip, err := systemHosts.LookUp(hostname, typ)
+				if len(systemHostsEntries) > 0 {
+					ip, err := lookupSystemHosts(systemHostsEntries, hostname, typ)
 					if err == nil && ip != "" {
 						logger.Info("Resolved %s (%s) from system hosts -> %v", hostname, queryType, []string{ip})
 						return []string{ip}, nil

@@ -42,6 +42,12 @@ hosts:
   # More examples
   "api.example.com": "10.0.0.1"
   "db.example.com": "10.0.0.2"
+  
+  # Wildcard pattern (matches any subdomain)
+  "*.example.com": "1.2.3.4"
+  
+  # Regex pattern (matches domains starting with mp- followed by word characters)
+  "^mp-\\w+\\.example\\.com$": "1.2.3.4"
 
 # System hosts file configuration (second priority, after config hosts)
 # System hosts file lookup is enabled by default

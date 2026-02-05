@@ -439,9 +439,9 @@ func TestIsIPv6(t *testing.T) {
 	}
 
 	for _, tt := range tests {
-		result := isIPv6(tt.ip)
+		result := IsIPv6(tt.ip)
 		if result != tt.isIPv6 {
-			t.Errorf("isIPv6(%s) = %v, expected %v", tt.ip, result, tt.isIPv6)
+			t.Errorf("IsIPv6(%s) = %v, expected %v", tt.ip, result, tt.isIPv6)
 		}
 	}
 }
@@ -457,6 +457,75 @@ func TestParseHosts_EmptyHosts(t *testing.T) {
 	}
 	if len(hosts) != 0 {
 		t.Errorf("Expected empty hosts map, got %d entries", len(hosts))
+	}
+}
+
+func TestLookupHost_Wildcard(t *testing.T) {
+	cfg := &Config{
+		Hosts: HostsConfig{
+			"*.example.com": "1.2.3.4",
+			"test.example.com": "2.3.4.5",
+		},
+	}
+
+	// Test wildcard match
+	ips, err := cfg.LookupHost("sub.example.com", 4)
+	if err != nil {
+		t.Fatalf("Failed to lookup host: %v", err)
+	}
+	if len(ips) != 1 || ips[0] != "1.2.3.4" {
+		t.Errorf("Expected [1.2.3.4] for sub.example.com, got %v", ips)
+	}
+
+	// Test exact match takes priority
+	ips, err = cfg.LookupHost("test.example.com", 4)
+	if err != nil {
+		t.Fatalf("Failed to lookup host: %v", err)
+	}
+	if len(ips) != 1 || ips[0] != "2.3.4.5" {
+		t.Errorf("Expected [2.3.4.5] for test.example.com, got %v", ips)
+	}
+
+	// Test another wildcard match
+	ips, err = cfg.LookupHost("www.example.com", 4)
+	if err != nil {
+		t.Fatalf("Failed to lookup host: %v", err)
+	}
+	if len(ips) != 1 || ips[0] != "1.2.3.4" {
+		t.Errorf("Expected [1.2.3.4] for www.example.com, got %v", ips)
+	}
+}
+
+func TestLookupHost_Regex(t *testing.T) {
+	cfg := &Config{
+		Hosts: HostsConfig{
+			"^mp-\\w+\\.example\\.com$": "1.2.3.4",
+			"test.example.com": "2.3.4.5",
+		},
+	}
+
+	// Test regex match
+	ips, err := cfg.LookupHost("mp-123.example.com", 4)
+	if err != nil {
+		t.Fatalf("Failed to lookup host: %v", err)
+	}
+	if len(ips) != 1 || ips[0] != "1.2.3.4" {
+		t.Errorf("Expected [1.2.3.4] for mp-123.example.com, got %v", ips)
+	}
+
+	// Test another regex match
+	ips, err = cfg.LookupHost("mp-abc.example.com", 4)
+	if err != nil {
+		t.Fatalf("Failed to lookup host: %v", err)
+	}
+	if len(ips) != 1 || ips[0] != "1.2.3.4" {
+		t.Errorf("Expected [1.2.3.4] for mp-abc.example.com, got %v", ips)
+	}
+
+	// Test non-matching domain
+	_, err = cfg.LookupHost("mp.example.com", 4)
+	if err == nil {
+		t.Error("Expected error for non-matching domain mp.example.com")
 	}
 }
 

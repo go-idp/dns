@@ -3,6 +3,7 @@ package config
 import (
 	"fmt"
 	"os"
+	"regexp"
 	"strings"
 
 	"gopkg.in/yaml.v3"
@@ -46,9 +47,12 @@ type HostsConfig map[string]interface{}
 
 // HostMapping represents a parsed host mapping
 type HostMapping struct {
-	Domain string
-	IPv4   []string
-	IPv6   []string
+	Domain    string
+	IPv4      []string
+	IPv6      []string
+	IsWildcard bool   // true if domain contains wildcard (*)
+	IsRegex   bool   // true if domain is a regex pattern (starts with ^)
+	Regex     *regexp.Regexp // compiled regex pattern if IsRegex is true
 }
 
 // SystemHostsConfig represents system hosts file configuration
@@ -108,18 +112,37 @@ func (c *Config) ParseHosts() (map[string]*HostMapping, error) {
 	hosts := make(map[string]*HostMapping)
 
 	for domain, value := range c.Hosts {
-		domain = strings.ToLower(strings.TrimSpace(domain))
+		domain = strings.TrimSpace(domain)
+		domainLower := strings.ToLower(domain)
+		
+		// Check if it's a regex pattern (starts with ^)
+		isRegex := strings.HasPrefix(domain, "^")
+		// Check if it contains wildcard
+		isWildcard := strings.Contains(domain, "*")
+		
 		mapping := &HostMapping{
-			Domain: domain,
-			IPv4:   []string{},
-			IPv6:   []string{},
+			Domain:     domainLower,
+			IPv4:       []string{},
+			IPv6:       []string{},
+			IsWildcard: isWildcard,
+			IsRegex:    isRegex,
+		}
+		
+		// Compile regex if it's a regex pattern
+		if isRegex {
+			// Use the domain as-is (YAML already handles escaping)
+			compiled, err := regexp.Compile(domain)
+			if err != nil {
+				return nil, fmt.Errorf("invalid regex pattern %s: %w", domain, err)
+			}
+			mapping.Regex = compiled
 		}
 
 		switch v := value.(type) {
 		case string:
 			// Simple format: "example.com": "1.2.3.4"
 			ip := strings.TrimSpace(v)
-			if isIPv6(ip) {
+			if IsIPv6(ip) {
 				mapping.IPv6 = append(mapping.IPv6, ip)
 			} else {
 				mapping.IPv4 = append(mapping.IPv4, ip)
@@ -129,7 +152,7 @@ func (c *Config) ParseHosts() (map[string]*HostMapping, error) {
 			// Multiple IPs: "example.com": ["1.2.3.4", "1.2.3.5"]
 			for _, item := range v {
 				ip := strings.TrimSpace(fmt.Sprintf("%v", item))
-				if isIPv6(ip) {
+				if IsIPv6(ip) {
 					mapping.IPv6 = append(mapping.IPv6, ip)
 				} else {
 					mapping.IPv4 = append(mapping.IPv4, ip)
@@ -160,11 +183,28 @@ func (c *Config) ParseHosts() (map[string]*HostMapping, error) {
 		}
 
 		if len(mapping.IPv4) > 0 || len(mapping.IPv6) > 0 {
-			hosts[domain] = mapping
+			hosts[domainLower] = mapping
 		}
 	}
 
 	return hosts, nil
+}
+
+// MatchWildcard checks if a domain matches a wildcard pattern
+// This is exported so it can be used by the server command
+func MatchWildcard(domain, pattern string) bool {
+	// Convert wildcard pattern to regex
+	// *.example.com -> ^.*\.example\.com$
+	// *.*.example.com -> ^.*\..*\.example\.com$
+	regexPattern := "^" + strings.ReplaceAll(regexp.QuoteMeta(pattern), "\\*", ".*") + "$"
+	matched, _ := regexp.MatchString(regexPattern, domain)
+	return matched
+}
+
+// IsIPv6 checks if an IP address is IPv6
+// This is exported so it can be used by the server command
+func IsIPv6(ip string) bool {
+	return strings.Contains(ip, ":")
 }
 
 // LookupHost looks up a domain in the hosts configuration
@@ -175,9 +215,10 @@ func (c *Config) LookupHost(domain string, queryType int) ([]string, error) {
 	}
 
 	domain = strings.ToLower(strings.TrimSpace(domain))
+	domainNoDot := strings.TrimSuffix(domain, ".")
 
 	// Try exact match first
-	if mapping, ok := hosts[domain]; ok {
+	if mapping, ok := hosts[domain]; ok && !mapping.IsWildcard && !mapping.IsRegex {
 		if queryType == 4 { // A record
 			if len(mapping.IPv4) > 0 {
 				return mapping.IPv4, nil
@@ -190,8 +231,7 @@ func (c *Config) LookupHost(domain string, queryType int) ([]string, error) {
 	}
 
 	// Try with trailing dot removed
-	domainNoDot := strings.TrimSuffix(domain, ".")
-	if mapping, ok := hosts[domainNoDot]; ok {
+	if mapping, ok := hosts[domainNoDot]; ok && !mapping.IsWildcard && !mapping.IsRegex {
 		if queryType == 4 { // A record
 			if len(mapping.IPv4) > 0 {
 				return mapping.IPv4, nil
@@ -203,10 +243,31 @@ func (c *Config) LookupHost(domain string, queryType int) ([]string, error) {
 		}
 	}
 
+	// Try wildcard and regex patterns
+	for pattern, mapping := range hosts {
+		var matched bool
+		
+		if mapping.IsRegex && mapping.Regex != nil {
+			// Match against regex pattern
+			matched = mapping.Regex.MatchString(domain) || mapping.Regex.MatchString(domainNoDot)
+		} else if mapping.IsWildcard {
+			// Match against wildcard pattern
+			matched = MatchWildcard(domain, pattern) || MatchWildcard(domainNoDot, pattern)
+		}
+		
+		if matched {
+			if queryType == 4 { // A record
+				if len(mapping.IPv4) > 0 {
+					return mapping.IPv4, nil
+				}
+			} else if queryType == 6 { // AAAA record
+				if len(mapping.IPv6) > 0 {
+					return mapping.IPv6, nil
+				}
+			}
+		}
+	}
+
 	return nil, fmt.Errorf("not found in hosts")
 }
 
-// isIPv6 checks if an IP address is IPv6
-func isIPv6(ip string) bool {
-	return strings.Contains(ip, ":")
-}
