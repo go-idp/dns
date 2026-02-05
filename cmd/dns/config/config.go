@@ -13,6 +13,8 @@ import (
 type Config struct {
 	Server      ServerConfig      `yaml:"server"`
 	DoT         DoTConfig         `yaml:"dot"`
+	DoH         DoHConfig         `yaml:"doh"`
+	DoQ         DoQConfig         `yaml:"doq"`
 	Hosts       HostsConfig       `yaml:"hosts"`
 	SystemHosts SystemHostsConfig `yaml:"system_hosts"`
 	Upstream    UpstreamConfig    `yaml:"upstream"`
@@ -27,6 +29,20 @@ type ServerConfig struct {
 
 // DoTConfig represents DNS-over-TLS configuration
 type DoTConfig struct {
+	Enabled bool      `yaml:"enabled"`
+	Port    int       `yaml:"port"`
+	TLS     TLSConfig `yaml:"tls"`
+}
+
+// DoHConfig represents DNS-over-HTTPS configuration
+type DoHConfig struct {
+	Enabled bool      `yaml:"enabled"`
+	Port    int       `yaml:"port"`
+	TLS     TLSConfig `yaml:"tls"`
+}
+
+// DoQConfig represents DNS-over-QUIC configuration
+type DoQConfig struct {
 	Enabled bool      `yaml:"enabled"`
 	Port    int       `yaml:"port"`
 	TLS     TLSConfig `yaml:"tls"`
@@ -91,6 +107,12 @@ func LoadConfig(filePath string) (*Config, error) {
 	}
 	if config.DoT.Port == 0 {
 		config.DoT.Port = 853
+	}
+	if config.DoH.Port == 0 {
+		config.DoH.Port = 443
+	}
+	if config.DoQ.Port == 0 {
+		config.DoQ.Port = 853
 	}
 	if config.Upstream.Timeout == "" {
 		config.Upstream.Timeout = "5s"

@@ -109,6 +109,12 @@ hosts:
 	if cfg.DoT.Port != 853 {
 		t.Errorf("Expected default DoT port 853, got %d", cfg.DoT.Port)
 	}
+	if cfg.DoH.Port != 443 {
+		t.Errorf("Expected default DoH port 443, got %d", cfg.DoH.Port)
+	}
+	if cfg.DoQ.Port != 853 {
+		t.Errorf("Expected default DoQ port 853, got %d", cfg.DoQ.Port)
+	}
 	if cfg.Upstream.Timeout != "5s" {
 		t.Errorf("Expected default timeout 5s, got %s", cfg.Upstream.Timeout)
 	}
@@ -657,5 +663,136 @@ server:
 	}
 	if cfg.SystemHosts.FilePath != "/etc/hosts" {
 		t.Errorf("Expected default file path /etc/hosts, got %s", cfg.SystemHosts.FilePath)
+	}
+}
+
+func TestLoadConfig_DoH(t *testing.T) {
+	tmpDir := t.TempDir()
+	configFile := filepath.Join(tmpDir, "doh.yaml")
+
+	configContent := `
+server:
+  port: 53
+
+doh:
+  enabled: true
+  port: 8443
+  tls:
+    cert: "/path/to/doh-cert.pem"
+    key: "/path/to/doh-key.pem"
+`
+
+	if err := os.WriteFile(configFile, []byte(configContent), 0644); err != nil {
+		t.Fatalf("Failed to write config file: %v", err)
+	}
+
+	cfg, err := LoadConfig(configFile)
+	if err != nil {
+		t.Fatalf("Failed to load config: %v", err)
+	}
+
+	// Test DoH config
+	if !cfg.DoH.Enabled {
+		t.Error("Expected DoH to be enabled")
+	}
+	if cfg.DoH.Port != 8443 {
+		t.Errorf("Expected DoH port 8443, got %d", cfg.DoH.Port)
+	}
+	if cfg.DoH.TLS.Cert != "/path/to/doh-cert.pem" {
+		t.Errorf("Expected cert /path/to/doh-cert.pem, got %s", cfg.DoH.TLS.Cert)
+	}
+	if cfg.DoH.TLS.Key != "/path/to/doh-key.pem" {
+		t.Errorf("Expected key /path/to/doh-key.pem, got %s", cfg.DoH.TLS.Key)
+	}
+}
+
+func TestLoadConfig_DoQ(t *testing.T) {
+	tmpDir := t.TempDir()
+	configFile := filepath.Join(tmpDir, "doq.yaml")
+
+	configContent := `
+server:
+  port: 53
+
+doq:
+  enabled: true
+  port: 8853
+  tls:
+    cert: "/path/to/doq-cert.pem"
+    key: "/path/to/doq-key.pem"
+`
+
+	if err := os.WriteFile(configFile, []byte(configContent), 0644); err != nil {
+		t.Fatalf("Failed to write config file: %v", err)
+	}
+
+	cfg, err := LoadConfig(configFile)
+	if err != nil {
+		t.Fatalf("Failed to load config: %v", err)
+	}
+
+	// Test DoQ config
+	if !cfg.DoQ.Enabled {
+		t.Error("Expected DoQ to be enabled")
+	}
+	if cfg.DoQ.Port != 8853 {
+		t.Errorf("Expected DoQ port 8853, got %d", cfg.DoQ.Port)
+	}
+	if cfg.DoQ.TLS.Cert != "/path/to/doq-cert.pem" {
+		t.Errorf("Expected cert /path/to/doq-cert.pem, got %s", cfg.DoQ.TLS.Cert)
+	}
+	if cfg.DoQ.TLS.Key != "/path/to/doq-key.pem" {
+		t.Errorf("Expected key /path/to/doq-key.pem, got %s", cfg.DoQ.TLS.Key)
+	}
+}
+
+func TestLoadConfig_AllProtocols(t *testing.T) {
+	tmpDir := t.TempDir()
+	configFile := filepath.Join(tmpDir, "all-protocols.yaml")
+
+	configContent := `
+server:
+  port: 53
+
+dot:
+  enabled: true
+  port: 853
+  tls:
+    cert: "/path/to/cert.pem"
+    key: "/path/to/key.pem"
+
+doh:
+  enabled: true
+  port: 443
+  tls:
+    cert: "/path/to/cert.pem"
+    key: "/path/to/key.pem"
+
+doq:
+  enabled: true
+  port: 853
+  tls:
+    cert: "/path/to/cert.pem"
+    key: "/path/to/key.pem"
+`
+
+	if err := os.WriteFile(configFile, []byte(configContent), 0644); err != nil {
+		t.Fatalf("Failed to write config file: %v", err)
+	}
+
+	cfg, err := LoadConfig(configFile)
+	if err != nil {
+		t.Fatalf("Failed to load config: %v", err)
+	}
+
+	// Test all protocols are enabled
+	if !cfg.DoT.Enabled {
+		t.Error("Expected DoT to be enabled")
+	}
+	if !cfg.DoH.Enabled {
+		t.Error("Expected DoH to be enabled")
+	}
+	if !cfg.DoQ.Enabled {
+		t.Error("Expected DoQ to be enabled")
 	}
 }

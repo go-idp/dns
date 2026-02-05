@@ -36,6 +36,12 @@ dns client --domain google.com --type AAAA
 # Use DoT server
 dns client --domain example.com --server tls://1.1.1.1
 
+# Use DoH server
+dns client --domain example.com --server https://cloudflare-dns.com/dns-query
+
+# Use DoQ server
+dns client --domain example.com --server quic://dns.adguard.com
+
 # Use custom timeout
 dns client --domain example.com --timeout 10s
 ```
@@ -47,6 +53,19 @@ dns server --port 53
 
 # Start DNS server with DoT support
 dns server --port 53 --dot --tls-cert /path/to/cert.pem --tls-key /path/to/key.pem
+
+# Start DNS server with DoH support
+dns server --port 53 --doh --tls-cert /path/to/cert.pem --tls-key /path/to/key.pem
+
+# Start DNS server with DoQ support
+dns server --port 53 --doq --tls-cert /path/to/cert.pem --tls-key /path/to/key.pem
+
+# Start DNS server with all protocols (DoT, DoH, DoQ)
+dns server --port 53 \
+  --dot --dot-port 853 \
+  --doh --doh-port 443 \
+  --doq --doq-port 853 \
+  --tls-cert /path/to/cert.pem --tls-key /path/to/key.pem
 
 # Start DNS server with custom upstream
 dns server --port 53 --upstream 8.8.8.8:53 --upstream 1.1.1.1:53
@@ -73,6 +92,22 @@ server:
 
 # DNS-over-TLS (DoT) configuration
 dot:
+  enabled: false
+  port: 853
+  tls:
+    cert: "/path/to/cert.pem"
+    key: "/path/to/key.pem"
+
+# DNS-over-HTTPS (DoH) configuration
+doh:
+  enabled: false
+  port: 443
+  tls:
+    cert: "/path/to/cert.pem"
+    key: "/path/to/key.pem"
+
+# DNS-over-QUIC (DoQ) configuration
+doq:
   enabled: false
   port: 853
   tls:
@@ -146,8 +181,8 @@ See the [documentation](https://go-idp.github.io/dns/) for more examples and det
 	* [x] Plain DNS in UDP
 	* [x] Plain DNS in TCP
 * [x] DNS-over-TLS (DoT)
-* [ ] DNS-over-HTTPS (DoH)
-* [ ] DNS-over-QUIC (DoQ)
+* [x] DNS-over-HTTPS (DoH)
+* [x] DNS-over-QUIC (DoQ)
 
 ## Inspired By
 * [AdGuardHome](https://github.com/AdguardTeam/AdGuardHome) - Network-wide ads & trackers blocking DNS server.

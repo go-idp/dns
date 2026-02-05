@@ -5,7 +5,7 @@ go 1.25.6
 require (
 	github.com/fsnotify/fsnotify v1.7.0
 	github.com/go-zoox/cli v1.5.0
-	github.com/go-zoox/dns v1.2.4
+	github.com/go-zoox/dns v1.2.5
 	github.com/go-zoox/fs v1.3.15
 	github.com/go-zoox/kv v1.1.7
 	github.com/go-zoox/logger v1.6.3

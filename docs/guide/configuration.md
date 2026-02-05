@@ -19,6 +19,22 @@ dot:
     cert: "/path/to/cert.pem"    # TLS certificate file path
     key: "/path/to/key.pem"      # TLS private key file path
 
+# DNS-over-HTTPS (DoH) configuration
+doh:
+  enabled: false         # Enable DoH server (default: false)
+  port: 443             # DoH server port (default: 443)
+  tls:
+    cert: "/path/to/cert.pem"    # TLS certificate file path
+    key: "/path/to/key.pem"      # TLS private key file path
+
+# DNS-over-QUIC (DoQ) configuration
+doq:
+  enabled: false         # Enable DoQ server (default: false)
+  port: 853             # DoQ server port (default: 853)
+  tls:
+    cert: "/path/to/cert.pem"    # TLS certificate file path
+    key: "/path/to/key.pem"      # TLS private key file path
+
 # Custom domain mappings (highest priority)
 hosts:
   # Simple format: single domain to single IP

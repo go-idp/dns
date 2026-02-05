@@ -65,7 +65,7 @@ dns server --port 53 --dot --tls-cert /path/to/cert.pem --tls-key /path/to/key.p
 
 ### `--tls-cert` / `--tls-key`
 
-TLS certificate and key files for DoT server.
+TLS certificate and key files for DoT, DoH, and DoQ servers.
 
 ```bash
 dns server --dot --tls-cert cert.pem --tls-key key.pem
@@ -77,6 +77,38 @@ DoT server port. Default: 853.
 
 ```bash
 dns server --dot --dot-port 853 --tls-cert cert.pem --tls-key key.pem
+```
+
+### `--doh`
+
+Enable DNS-over-HTTPS (DoH) server.
+
+```bash
+dns server --port 53 --doh --tls-cert /path/to/cert.pem --tls-key /path/to/key.pem
+```
+
+### `--doh-port`
+
+DoH server port. Default: 443.
+
+```bash
+dns server --doh --doh-port 443 --tls-cert cert.pem --tls-key key.pem
+```
+
+### `--doq`
+
+Enable DNS-over-QUIC (DoQ) server.
+
+```bash
+dns server --port 53 --doq --tls-cert /path/to/cert.pem --tls-key /path/to/key.pem
+```
+
+### `--doq-port`
+
+DoQ server port. Default: 853.
+
+```bash
+dns server --doq --doq-port 853 --tls-cert cert.pem --tls-key key.pem
 ```
 
 ### `--ttl`
@@ -126,6 +158,29 @@ dns server --port 53 --upstream 8.8.8.8:53
 dns server --port 53 --dot --tls-cert cert.pem --tls-key key.pem
 ```
 
+### Server with DoH
+
+```bash
+dns server --port 53 --doh --tls-cert cert.pem --tls-key key.pem
+```
+
+### Server with DoQ
+
+```bash
+dns server --port 53 --doq --tls-cert cert.pem --tls-key key.pem
+```
+
+### Server with Multiple Protocols
+
+```bash
+# Enable all protocols (DoT, DoH, DoQ)
+dns server --port 53 \
+  --dot --dot-port 853 \
+  --doh --doh-port 443 \
+  --doq --doq-port 853 \
+  --tls-cert cert.pem --tls-key key.pem
+```
+
 ### Server with Configuration File
 
 ```bash
@@ -137,3 +192,4 @@ dns server --config config.yaml
 - [Configuration](/guide/configuration) - Learn about configuration options
 - [DNS-over-TLS](/guide/dot) - Learn about DoT server setup
 - [Examples](/examples/) - See more examples
+- [DoH and DoQ Client Examples](/examples/doh-doq-client) - Learn about DoH and DoQ client usage

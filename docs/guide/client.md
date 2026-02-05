@@ -95,6 +95,23 @@ dns client --domain example.com --server tls://1.1.1.1
 dns client --domain example.com --server https://dns.adguard.com/dns-query
 ```
 
+### Query with DoQ
+
+```bash
+dns client --domain example.com --server quic://dns.adguard.com
+```
+
+### Query with Multiple Protocols
+
+```bash
+# Use multiple servers with different protocols
+dns client --domain example.com \
+  --server 8.8.8.8 \
+  --server tls://1.1.1.1 \
+  --server https://cloudflare-dns.com/dns-query \
+  --server quic://dns.adguard.com
+```
+
 ### Script-friendly Output
 
 ```bash

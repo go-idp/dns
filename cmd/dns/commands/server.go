@@ -400,8 +400,30 @@ func NewServerCommand() *cli.Command {
 			},
 			&cli.StringFlag{
 				Name:    "tls-key",
-				Usage:   "TLS private key file path (required for DoT)",
+				Usage:   "TLS private key file path (required for DoT, DoH, DoQ)",
 				EnvVars: []string{"DNS_TLS_KEY"},
+			},
+			&cli.BoolFlag{
+				Name:    "doh",
+				Usage:   "Enable DNS-over-HTTPS (DoH)",
+				EnvVars: []string{"DNS_DOH"},
+			},
+			&cli.IntFlag{
+				Name:    "doh-port",
+				Usage:   "DoH server port",
+				Value:   443,
+				EnvVars: []string{"DNS_DOH_PORT"},
+			},
+			&cli.BoolFlag{
+				Name:    "doq",
+				Usage:   "Enable DNS-over-QUIC (DoQ)",
+				EnvVars: []string{"DNS_DOQ"},
+			},
+			&cli.IntFlag{
+				Name:    "doq-port",
+				Usage:   "DoQ server port",
+				Value:   853,
+				EnvVars: []string{"DNS_DOQ_PORT"},
 			},
 			&cli.StringSliceFlag{
 				Name:    "upstream",
@@ -441,6 +463,10 @@ func NewServerCommand() *cli.Command {
 			ttl := ctx.Uint("ttl")
 			enableDoT := ctx.Bool("dot")
 			dotPort := ctx.Int("dot-port")
+			enableDoH := ctx.Bool("doh")
+			dohPort := ctx.Int("doh-port")
+			enableDoQ := ctx.Bool("doq")
+			doqPort := ctx.Int("doq-port")
 			tlsCert := ctx.String("tls-cert")
 			tlsKey := ctx.String("tls-key")
 			upstreams := ctx.StringSlice("upstream")
@@ -469,6 +495,30 @@ func NewServerCommand() *cli.Command {
 				}
 				if tlsKey == "" && cfg.DoT.TLS.Key != "" {
 					tlsKey = cfg.DoT.TLS.Key
+				}
+				if !enableDoH && cfg.DoH.Enabled {
+					enableDoH = cfg.DoH.Enabled
+				}
+				if dohPort == 443 && cfg.DoH.Port != 0 {
+					dohPort = cfg.DoH.Port
+				}
+				if tlsCert == "" && cfg.DoH.TLS.Cert != "" {
+					tlsCert = cfg.DoH.TLS.Cert
+				}
+				if tlsKey == "" && cfg.DoH.TLS.Key != "" {
+					tlsKey = cfg.DoH.TLS.Key
+				}
+				if !enableDoQ && cfg.DoQ.Enabled {
+					enableDoQ = cfg.DoQ.Enabled
+				}
+				if doqPort == 853 && cfg.DoQ.Port != 0 {
+					doqPort = cfg.DoQ.Port
+				}
+				if tlsCert == "" && cfg.DoQ.TLS.Cert != "" {
+					tlsCert = cfg.DoQ.TLS.Cert
+				}
+				if tlsKey == "" && cfg.DoQ.TLS.Key != "" {
+					tlsKey = cfg.DoQ.TLS.Key
 				}
 				if len(upstreams) == 0 && len(cfg.Upstream.Servers) > 0 {
 					upstreams = cfg.Upstream.Servers
@@ -506,10 +556,10 @@ func NewServerCommand() *cli.Command {
 				}
 			}
 
-			// Validate DoT configuration
-			if enableDoT {
+			// Validate DoT, DoH, and DoQ configuration
+			if enableDoT || enableDoH || enableDoQ {
 				if tlsCert == "" || tlsKey == "" {
-					return fmt.Errorf("TLS certificate and key are required when DoT is enabled (use --tls-cert and --tls-key or config file)")
+					return fmt.Errorf("TLS certificate and key are required when DoT/DoH/DoQ is enabled (use --tls-cert and --tls-key or config file)")
 				}
 			}
 
@@ -525,10 +575,20 @@ func NewServerCommand() *cli.Command {
 				Host:      host,
 				TTL:       uint32(ttl),
 				EnableDoT: enableDoT,
+				EnableDoH: enableDoH,
+				EnableDoQ: enableDoQ,
 			}
 
 			if enableDoT {
 				serverOptions.DoTPort = dotPort
+			}
+			if enableDoH {
+				serverOptions.DoHPort = dohPort
+			}
+			if enableDoQ {
+				serverOptions.DoQPort = doqPort
+			}
+			if enableDoT || enableDoH || enableDoQ {
 				serverOptions.TLSCertFile = tlsCert
 				serverOptions.TLSKeyFile = tlsKey
 			}
@@ -629,11 +689,17 @@ func NewServerCommand() *cli.Command {
 			}()
 
 			// Start server
+			protocols := []string{"UDP/TCP"}
 			if enableDoT {
-				logger.Info("Starting DNS server on %s:%d (UDP/TCP) and DoT on %s:%d", host, port, host, dotPort)
-			} else {
-				logger.Info("Starting DNS server on %s:%d (UDP/TCP)", host, port)
+				protocols = append(protocols, fmt.Sprintf("DoT on %s:%d", host, dotPort))
 			}
+			if enableDoH {
+				protocols = append(protocols, fmt.Sprintf("DoH on %s:%d", host, dohPort))
+			}
+			if enableDoQ {
+				protocols = append(protocols, fmt.Sprintf("DoQ on %s:%d", host, doqPort))
+			}
+			logger.Info("Starting DNS server on %s:%d (%s)", host, port, strings.Join(protocols, ", "))
 
 			server.Serve()
 

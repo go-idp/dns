@@ -58,13 +58,22 @@ dns client --domain example.com --server https://cloudflare-dns.com/dns-query
 
 ## DNS-over-QUIC (DoQ)
 
-DNS queries over QUIC protocol. Provides low latency and security.
+DNS queries over QUIC protocol. Provides low latency and security. DoQ uses the QUIC transport protocol, which offers connection multiplexing, improved error handling, and reduced latency compared to DoT.
 
 ### Usage
 
 ```bash
+# AdGuard DoQ
 dns client --domain example.com --server quic://dns.adguard.com
+
+# DoQ with custom port
+dns client --domain example.com --server quic://dns.adguard.com:853
 ```
+
+### Popular DoQ Servers
+
+- AdGuard: `quic://dns.adguard.com`
+- Cloudflare: `quic://cloudflare-dns.com` (if supported)
 
 ## DNSCrypt
 

@@ -40,8 +40,8 @@ github.com/go-zoox/datetime v1.3.2 h1:ZhvVLmcNltRITGuQjo247iCdCBc/2lw8YgeR0ee3lS
 github.com/go-zoox/datetime v1.3.2/go.mod h1:qvaCrzjhq/g/gstx4sx06Nl4ll2pLSrkRa9ueLjrZ9A=
 github.com/go-zoox/debug v1.0.5 h1:M8hO5C5eujLmFiWQ2hTij3fpO8eGVBA8jE5K6JA7HlY=
 github.com/go-zoox/debug v1.0.5/go.mod h1:gC90/McIkAgNg13Xpy8BelBYD/Ac335SDUsbKU0Ww6c=
-github.com/go-zoox/dns v1.2.4 h1:TwMwav6lVHwZqVyxwyXvttl5eySWW9eviFLqScygd/o=
-github.com/go-zoox/dns v1.2.4/go.mod h1:Ocvu/bVZvArDjUaQ6Bm+jkLYfge2Csjqy6dw8rfCY+w=
+github.com/go-zoox/dns v1.2.5 h1:h2+vKWuQpkxWpYq/JRlOBx+iy6tM0iJWqakH0Lh2mc0=
+github.com/go-zoox/dns v1.2.5/go.mod h1:Ocvu/bVZvArDjUaQ6Bm+jkLYfge2Csjqy6dw8rfCY+w=
 github.com/go-zoox/dotenv v1.3.0 h1:9pwQBZooQ1c1X+Eyw9GqBGvZ9KvgZ/Hz0sBTDdjHp9o=
 github.com/go-zoox/dotenv v1.3.0/go.mod h1:DdBWoG8USiy6iIx1fD7WGtSiO13vzpqPRK3Qt1sPbr0=
 github.com/go-zoox/encoding v1.2.1 h1:38rQRsfL1f1YHZaqsPaGcNMkPnzatnPlYiHioUh9F4A=
