@@ -33,12 +33,12 @@ func isRegexPattern(pattern string) bool {
 	if strings.Contains(pattern, "*") {
 		return false
 	}
-	
+
 	// Try to compile as regex
 	if _, err := regexp.Compile(pattern); err != nil {
 		return false
 	}
-	
+
 	// Check if it contains regex metacharacters (beyond just dots)
 	hasRegexMeta := strings.ContainsAny(pattern, "^$+?()[]{}|\\")
 	return hasRegexMeta
@@ -46,6 +46,7 @@ func isRegexPattern(pattern string) bool {
 
 // parseSystemHostsFile parses a system hosts file with support for wildcard and regex patterns
 // Uses github.com/go-zoox/fs/type/hosts to parse the file, then enhances entries with pattern matching
+// Note: hostsParser.Mapping format is "domain:queryType" -> "IP" (e.g., "frontend:4" -> "10.1.0.169")
 func parseSystemHostsFile(filePath string) ([]SystemHostsEntry, error) {
 	hostsParser := hosts.New(filePath)
 	if err := hostsParser.Load(); err != nil {
@@ -53,41 +54,62 @@ func parseSystemHostsFile(filePath string) ([]SystemHostsEntry, error) {
 	}
 
 	var entries []SystemHostsEntry
+	domainMap := make(map[string]*SystemHostsEntry) // Use map to merge entries for same domain
 
 	// Iterate through the hosts mapping
-	for domain, ip := range hostsParser.Mapping {
+	// Note: hostsParser.Mapping format is "domain:queryType" -> "IP" (e.g., "frontend:4" -> "10.1.0.169")
+	for key, ip := range hostsParser.Mapping {
+		// Parse the key format: "domain:queryType" or just "domain"
+		// Extract domain part (remove :4 or :6 suffix)
+		domain := key
+		if idx := strings.LastIndex(key, ":"); idx > 0 {
+			domain = key[:idx]
+		}
 		domain = strings.TrimSpace(domain)
 		if domain == "" {
 			continue
 		}
 
-		// Try to determine if it's a regex pattern by attempting to compile it
-		isRegex := isRegexPattern(domain)
-		// Check if it contains wildcard (but not if it's already a regex)
-		isWildcard := !isRegex && strings.Contains(domain, "*")
+		domainLower := strings.ToLower(domain)
 
-		entry := SystemHostsEntry{
-			IP:         ip,
-			Domain:     strings.ToLower(domain),
-			IsWildcard: isWildcard,
-			IsRegex:    isRegex,
-		}
+		// Get or create entry for this domain
+		entry, exists := domainMap[domainLower]
+		if !exists {
+			// Try to determine if it's a regex pattern by attempting to compile it
+			isRegex := isRegexPattern(domain)
+			// Check if it contains wildcard (but not if it's already a regex)
+			isWildcard := !isRegex && strings.Contains(domain, "*")
 
-		// Compile regex if it's a regex pattern
-		if isRegex {
-			compiled, err := regexp.Compile(domain)
-			if err != nil {
-				// This shouldn't happen since we already checked, but handle it anyway
-				logger.Warn("Failed to compile regex pattern in hosts file: %s, error: %v", domain, err)
-				continue
+			entry = &SystemHostsEntry{
+				IP:         ip,
+				Domain:     domainLower,
+				IsWildcard: isWildcard,
+				IsRegex:    isRegex,
 			}
-			entry.Regex = compiled
-		}
 
-		entries = append(entries, entry)
+			// Compile regex if it's a regex pattern
+			if isRegex {
+				compiled, err := regexp.Compile(domain)
+				if err != nil {
+					logger.Warn("Failed to compile regex pattern in hosts file: %s, error: %v", domain, err)
+					continue
+				}
+				entry.Regex = compiled
+			}
+
+			domainMap[domainLower] = entry
+		}
+		// If entry exists, we keep the first IP found (could be enhanced to support multiple IPs)
 	}
 
-	return entries, nil
+	// Convert map to slice (deduplicated by domain)
+	uniqueEntries := make([]SystemHostsEntry, 0, len(domainMap))
+	for _, entry := range domainMap {
+		uniqueEntries = append(uniqueEntries, *entry)
+	}
+
+	logger.Debug("Parsed %d unique entries from hosts file %s (total mappings: %d)", len(uniqueEntries), filePath, len(hostsParser.Mapping))
+	return uniqueEntries, nil
 }
 
 // lookupSystemHosts looks up a domain in system hosts entries with wildcard and regex support
@@ -95,15 +117,22 @@ func lookupSystemHosts(entries []SystemHostsEntry, domain string, queryType int)
 	domain = strings.ToLower(strings.TrimSpace(domain))
 	domainNoDot := strings.TrimSuffix(domain, ".")
 
+	logger.Debug("Looking up domain: %s (no dot: %s), query type: %d, entries count: %d", domain, domainNoDot, queryType, len(entries))
+
 	// First try exact matches
 	for _, entry := range entries {
 		if !entry.IsWildcard && !entry.IsRegex {
+			logger.Debug("Checking exact match: entry.Domain=%s, domain=%s, domainNoDot=%s", entry.Domain, domain, domainNoDot)
 			if entry.Domain == domain || entry.Domain == domainNoDot {
 				// Check if IP matches query type
 				if queryType == 4 && !config.IsIPv6(entry.IP) {
+					logger.Debug("Found exact match: %s -> %s", entry.Domain, entry.IP)
 					return entry.IP, nil
 				} else if queryType == 6 && config.IsIPv6(entry.IP) {
+					logger.Debug("Found exact match: %s -> %s", entry.Domain, entry.IP)
 					return entry.IP, nil
+				} else {
+					logger.Debug("IP type mismatch: queryType=%d, isIPv6=%v, IP=%s", queryType, config.IsIPv6(entry.IP), entry.IP)
 				}
 			}
 		}
@@ -115,8 +144,14 @@ func lookupSystemHosts(entries []SystemHostsEntry, domain string, queryType int)
 
 		if entry.IsRegex && entry.Regex != nil {
 			matched = entry.Regex.MatchString(domain) || entry.Regex.MatchString(domainNoDot)
+			if matched {
+				logger.Debug("Regex match: pattern=%s, domain=%s", entry.Domain, domain)
+			}
 		} else if entry.IsWildcard {
 			matched = config.MatchWildcard(domain, entry.Domain) || config.MatchWildcard(domainNoDot, entry.Domain)
+			if matched {
+				logger.Debug("Wildcard match: pattern=%s, domain=%s", entry.Domain, domain)
+			}
 		}
 
 		if matched {
@@ -129,6 +164,7 @@ func lookupSystemHosts(entries []SystemHostsEntry, domain string, queryType int)
 		}
 	}
 
+	logger.Debug("No match found for domain: %s", domain)
 	return "", fmt.Errorf("not found")
 }
 
@@ -317,6 +353,12 @@ func NewServerCommand() *cli.Command {
 				} else {
 					systemHostsEntries = entries
 					logger.Info("Loaded system hosts file: %s (with wildcard/regex support, %d entries)", systemHostsFile, len(entries))
+					// Debug: log first few entries
+					for i, entry := range entries {
+						if i < 5 {
+							logger.Debug("System hosts entry %d: %s -> %s (wildcard: %v, regex: %v)", i, entry.Domain, entry.IP, entry.IsWildcard, entry.IsRegex)
+						}
+					}
 				}
 			}
 
@@ -336,7 +378,7 @@ func NewServerCommand() *cli.Command {
 				if cfg != nil {
 					ips, err := cfg.LookupHost(hostname, typ)
 					if err == nil && len(ips) > 0 {
-						logger.Info("Resolved %s (%s) from config hosts -> %v", hostname, queryType, ips)
+						logger.Info("[channel: config.hosts] Resolved %s (%s) from config hosts -> %v", hostname, queryType, ips)
 						return ips, nil
 					}
 					logger.Debug("No match found in config hosts for %s (%s)", hostname, queryType)
@@ -346,14 +388,15 @@ func NewServerCommand() *cli.Command {
 
 				// Priority 2: Check system hosts file (if enabled)
 				if len(systemHostsEntries) > 0 {
+					logger.Debug("Checking system hosts for %s (%s), total entries: %d", hostname, queryType, len(systemHostsEntries))
 					ip, err := lookupSystemHosts(systemHostsEntries, hostname, typ)
 					if err == nil && ip != "" {
-						logger.Info("Resolved %s (%s) from system hosts -> %v", hostname, queryType, []string{ip})
+						logger.Info("[channel: system.hosts] Resolved %s (%s) from system hosts -> %v", hostname, queryType, []string{ip})
 						return []string{ip}, nil
 					}
-					logger.Debug("No match found in system hosts for %s (%s)", hostname, queryType)
+					logger.Debug("No match found in system hosts for %s (%s), error: %v", hostname, queryType, err)
 				} else {
-					logger.Debug("System hosts not enabled, skipping priority 2")
+					logger.Debug("System hosts not enabled or empty, skipping priority 2")
 				}
 
 				// Priority 3: Fallback to upstream DNS servers
@@ -367,7 +410,7 @@ func NewServerCommand() *cli.Command {
 				}
 
 				if len(ips) > 0 {
-					logger.Info("Resolved %s (%s) from upstream -> %v", hostname, queryType, ips)
+					logger.Info("[channel: upstream] Resolved %s (%s) from upstream -> %v", hostname, queryType, ips)
 				} else {
 					logger.Warn("No results found for %s (%s) from upstream", hostname, queryType)
 				}
