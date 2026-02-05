@@ -53,7 +53,6 @@ func parseSystemHostsFile(filePath string) ([]SystemHostsEntry, error) {
 		return nil, fmt.Errorf("failed to load hosts file: %w", err)
 	}
 
-	var entries []SystemHostsEntry
 	domainMap := make(map[string]*SystemHostsEntry) // Use map to merge entries for same domain
 
 	// Iterate through the hosts mapping
