@@ -45,7 +45,9 @@ export default defineConfig({
           items: [
             { text: 'Server Usage', link: '/guide/server' },
             { text: 'Configuration', link: '/guide/configuration' },
-            { text: 'DNS-over-TLS', link: '/guide/dot' }
+            { text: 'DNS-over-TLS', link: '/guide/dot' },
+            { text: 'DNS-over-HTTPS', link: '/guide/doh' },
+            { text: 'DNS-over-QUIC', link: '/guide/doq' }
           ]
         }
       ],
@@ -55,6 +57,8 @@ export default defineConfig({
           items: [
             { text: 'Basic Server', link: '/examples/basic-server' },
             { text: 'DoT Server', link: '/examples/dot-server' },
+            { text: 'DoH and DoQ Server', link: '/examples/doh-doq-server' },
+            { text: 'DoH and DoQ Client', link: '/examples/doh-doq-client' },
             { text: 'Configuration File', link: '/examples/config-file' }
           ]
         }

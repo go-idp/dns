@@ -85,6 +85,8 @@ Visit the [Guide](/guide/) for detailed usage instructions.
 ### Server Features
 - ✅ Plain DNS (UDP/TCP)
 - ✅ DNS-over-TLS (DoT)
+- ✅ DNS-over-HTTPS (DoH)
+- ✅ DNS-over-QUIC (DoQ)
 - ✅ Custom host mappings
 - ✅ Wildcard and regex pattern support
 - ✅ System hosts file integration
