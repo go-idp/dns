@@ -73,6 +73,17 @@ func NewServerCommand() *cli.Command {
 				Usage:   "Upstream DNS servers",
 				EnvVars: []string{"DNS_UPSTREAM"},
 			},
+			&cli.BoolFlag{
+				Name:    "system-hosts",
+				Usage:   "Enable system hosts file lookup (e.g., /etc/hosts)",
+				EnvVars: []string{"DNS_SYSTEM_HOSTS"},
+			},
+			&cli.StringFlag{
+				Name:    "system-hosts-file",
+				Usage:   "Path to system hosts file (default: /etc/hosts)",
+				Value:   "/etc/hosts",
+				EnvVars: []string{"DNS_SYSTEM_HOSTS_FILE"},
+			},
 		},
 		Action: func(ctx *cli.Context) error {
 			var cfg *config.Config
@@ -97,6 +108,8 @@ func NewServerCommand() *cli.Command {
 			tlsCert := ctx.String("tls-cert")
 			tlsKey := ctx.String("tls-key")
 			upstreams := ctx.StringSlice("upstream")
+			enableSystemHosts := ctx.Bool("system-hosts")
+			systemHostsFile := ctx.String("system-hosts-file")
 
 			// Merge config file values if config was loaded
 			if cfg != nil {
@@ -123,6 +136,13 @@ func NewServerCommand() *cli.Command {
 				}
 				if len(upstreams) == 0 && len(cfg.Upstream.Servers) > 0 {
 					upstreams = cfg.Upstream.Servers
+				}
+				// Merge system hosts config (CLI flags override config)
+				if !enableSystemHosts && cfg.SystemHosts.Enabled {
+					enableSystemHosts = cfg.SystemHosts.Enabled
+				}
+				if systemHostsFile == "/etc/hosts" && cfg.SystemHosts.FilePath != "" {
+					systemHostsFile = cfg.SystemHosts.FilePath
 				}
 			}
 
@@ -170,13 +190,13 @@ func NewServerCommand() *cli.Command {
 
 			// Initialize system hosts file parser if enabled
 			var systemHosts *hosts.Hosts
-			if cfg != nil && cfg.SystemHosts.Enabled {
-				systemHosts = hosts.New(cfg.SystemHosts.FilePath)
+			if enableSystemHosts {
+				systemHosts = hosts.New(systemHostsFile)
 				if err := systemHosts.Load(); err != nil {
-					logger.Warn("Failed to load system hosts file %s: %v", cfg.SystemHosts.FilePath, err)
+					logger.Warn("Failed to load system hosts file %s: %v", systemHostsFile, err)
 					systemHosts = nil
 				} else {
-					logger.Info("Loaded system hosts file: %s", cfg.SystemHosts.FilePath)
+					logger.Info("Loaded system hosts file: %s", systemHostsFile)
 				}
 			}
 
