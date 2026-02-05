@@ -185,34 +185,52 @@ func NewServerCommand() *cli.Command {
 			// 2. System /etc/hosts file (if enabled)
 			// 3. Upstream DNS servers
 			server.Handle(func(hostname string, typ int) ([]string, error) {
+				// Map query type to string for better logging
+				queryType := "A"
+				if typ == 6 {
+					queryType = "AAAA"
+				}
+				logger.Debug("DNS query received: %s (type: %s, code: %d)", hostname, queryType, typ)
+
 				// Priority 1: Check configuration hosts mapping
 				if cfg != nil {
 					ips, err := cfg.LookupHost(hostname, typ)
 					if err == nil && len(ips) > 0 {
-						logger.Info("Resolved %s (%d) from config hosts -> %v", hostname, typ, ips)
+						logger.Info("Resolved %s (%s) from config hosts -> %v", hostname, queryType, ips)
 						return ips, nil
 					}
+					logger.Debug("No match found in config hosts for %s (%s)", hostname, queryType)
+				} else {
+					logger.Debug("Config hosts not available, skipping priority 1")
 				}
 
 				// Priority 2: Check system hosts file (if enabled)
 				if systemHosts != nil {
 					ip, err := systemHosts.LookUp(hostname, typ)
 					if err == nil && ip != "" {
-						logger.Info("Resolved %s (%d) from system hosts -> %v", hostname, typ, []string{ip})
+						logger.Info("Resolved %s (%s) from system hosts -> %v", hostname, queryType, []string{ip})
 						return []string{ip}, nil
 					}
+					logger.Debug("No match found in system hosts for %s (%s)", hostname, queryType)
+				} else {
+					logger.Debug("System hosts not enabled, skipping priority 2")
 				}
 
 				// Priority 3: Fallback to upstream DNS servers
+				logger.Debug("Querying upstream DNS servers for %s (%s)", hostname, queryType)
 				ips, err := upstreamClient.LookUp(hostname, &client.LookUpOptions{
 					Typ: typ,
 				})
 				if err != nil {
-					logger.Error("Failed to resolve %s: %v", hostname, err)
+					logger.Error("Failed to resolve %s (%s) from upstream: %v", hostname, queryType, err)
 					return nil, err
 				}
 
-				logger.Info("Resolved %s (%d) from upstream -> %v", hostname, typ, ips)
+				if len(ips) > 0 {
+					logger.Info("Resolved %s (%s) from upstream -> %v", hostname, queryType, ips)
+				} else {
+					logger.Warn("No results found for %s (%s) from upstream", hostname, queryType)
+				}
 				return ips, nil
 			})
 
