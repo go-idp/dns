@@ -174,21 +174,21 @@ func lookupSystemHosts(entries []SystemHostsEntry, domain string, queryType int)
 func reloadSystemHostsFile(filePath string, entries *[]SystemHostsEntry, mutex *sync.RWMutex) {
 	// Small delay to ensure file write is complete
 	time.Sleep(200 * time.Millisecond)
-	
+
 	// Reload hosts file
 	newEntries, err := parseSystemHostsFile(filePath)
 	if err != nil {
 		logger.Warn("Failed to reload system hosts file %s: %v", filePath, err)
 		return
 	}
-	
+
 	// Update entries with lock
 	mutex.Lock()
 	oldCount := len(*entries)
 	*entries = newEntries
 	newCount := len(newEntries)
 	mutex.Unlock()
-	
+
 	logger.Info("Successfully reloaded system hosts file: %s (entries: %d -> %d)", filePath, oldCount, newCount)
 }
 
@@ -228,27 +228,27 @@ func watchSystemHostsFile(filePath string, entries *[]SystemHostsEntry, mutex *s
 
 			// Log all events for debugging
 			logger.Debug("File watcher event: %s, op: %v", event.Name, event.Op)
-			
+
 			// Check if the event is for our hosts file
 			// Compare both full path and filename (in case we're watching directory)
 			eventFileName := filepath.Base(event.Name)
 			isTargetFile := event.Name == filePath || eventFileName == fileName
-			
+
 			if isTargetFile {
 				// Handle different event types
-				// Note: On some systems, file updates may trigger Rename events
+				// Note: On some systems, file updates (including vim) may trigger Rename events
 				// (when editors use atomic writes: create temp file, delete old, rename temp)
 				if event.Op&fsnotify.Write == fsnotify.Write {
-					logger.Info("Detected write event on system hosts file: %s", filePath)
+					logger.Info("Detected change in system hosts file: %s (write event)", filePath)
 					reloadSystemHostsFile(filePath, entries, mutex)
 				} else if event.Op&fsnotify.Create == fsnotify.Create {
-					logger.Info("Detected create event on system hosts file: %s", filePath)
+					logger.Info("Detected change in system hosts file: %s (create event)", filePath)
 					reloadSystemHostsFile(filePath, entries, mutex)
 				} else if event.Op&fsnotify.Rename == fsnotify.Rename {
-					// Rename event often occurs during file updates (atomic write pattern)
-					// Check if file still exists (might have been renamed back)
+					// Rename event often occurs during file updates (atomic write pattern used by vim and other editors)
+					// Check if file still exists (file was likely renamed back to original name)
 					if _, err := os.Stat(filePath); err == nil {
-						logger.Info("Detected rename event on system hosts file: %s (file exists, reloading)", filePath)
+						logger.Info("Detected change in system hosts file: %s (file updated, reloading)", filePath)
 						reloadSystemHostsFile(filePath, entries, mutex)
 					} else {
 						logger.Warn("System hosts file %s was renamed and no longer exists", filePath)
