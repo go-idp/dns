@@ -1,7 +1,9 @@
 package commands
 
 import (
+	"bufio"
 	"fmt"
+	"net"
 	"os"
 	"os/signal"
 	"path/filepath"
@@ -168,6 +170,80 @@ func lookupSystemHosts(entries []SystemHostsEntry, domain string, queryType int)
 
 	logger.Debug("No match found for domain: %s", domain)
 	return "", fmt.Errorf("not found")
+}
+
+// parseResolvConf parses /etc/resolv.conf and extracts nameserver entries
+// Returns a list of nameserver addresses (with port if not specified, default is :53)
+// Filters out localhost and the server's own listening address
+func parseResolvConf(resolvConfPath string, serverHost string) ([]string, error) {
+	file, err := os.Open(resolvConfPath)
+	if err != nil {
+		return nil, fmt.Errorf("failed to open resolv.conf: %w", err)
+	}
+	defer file.Close()
+
+	var nameservers []string
+	scanner := bufio.NewScanner(file)
+	
+	// Track localhost IPs to filter out
+	localIPs := map[string]bool{
+		"127.0.0.1":   true,
+		"::1":         true,
+		"localhost":   true,
+		"0.0.0.0":     true,
+	}
+	
+	// Add server host to local IPs if it's a local address
+	if serverHost != "" && serverHost != "0.0.0.0" {
+		// Check if serverHost is a local IP
+		if ip := net.ParseIP(serverHost); ip != nil {
+			if ip.IsLoopback() || ip.IsUnspecified() {
+				localIPs[serverHost] = true
+			}
+		}
+	}
+
+	for scanner.Scan() {
+		line := strings.TrimSpace(scanner.Text())
+		// Skip empty lines and comments
+		if line == "" || strings.HasPrefix(line, "#") {
+			continue
+		}
+
+		// Parse nameserver line: nameserver <address>
+		fields := strings.Fields(line)
+		if len(fields) >= 2 && strings.ToLower(fields[0]) == "nameserver" {
+			addr := strings.TrimSpace(fields[1])
+			
+			// Skip localhost addresses
+			addrLower := strings.ToLower(addr)
+			if localIPs[addrLower] || localIPs[addr] {
+				logger.Debug("Skipping local nameserver: %s", addr)
+				continue
+			}
+			
+			// Check if it's a loopback IP
+			if ip := net.ParseIP(addr); ip != nil {
+				if ip.IsLoopback() || ip.IsUnspecified() {
+					logger.Debug("Skipping loopback nameserver: %s", addr)
+					continue
+				}
+			}
+			
+			// Add default port if not specified
+			if !strings.Contains(addr, ":") {
+				addr = addr + ":53"
+			}
+			
+			nameservers = append(nameservers, addr)
+		}
+	}
+
+	if err := scanner.Err(); err != nil {
+		return nil, fmt.Errorf("failed to read resolv.conf: %w", err)
+	}
+
+	return nameservers, nil
 }
 
 // reloadSystemHostsFile reloads the system hosts file and updates entries
@@ -407,9 +483,19 @@ func NewServerCommand() *cli.Command {
 				}
 			}
 
-			// Default upstream if still empty
+			// Default upstream: try to read from /etc/resolv.conf if still empty
 			if len(upstreams) == 0 {
-				upstreams = []string{"114.114.114.114:53"}
+				resolvConfServers, err := parseResolvConf("/etc/resolv.conf", host)
+				if err != nil {
+					logger.Warn("Failed to read /etc/resolv.conf: %v, using default upstream", err)
+					upstreams = []string{"114.114.114.114:53"}
+				} else if len(resolvConfServers) > 0 {
+					upstreams = resolvConfServers
+					logger.Info("Loaded %d upstream DNS servers from /etc/resolv.conf: %v", len(upstreams), upstreams)
+				} else {
+					logger.Warn("No valid nameservers found in /etc/resolv.conf, using default upstream")
+					upstreams = []string{"114.114.114.114:53"}
+				}
 			}
 
 			// Parse upstream timeout
