@@ -1,0 +1,16 @@
+{
+  "name": "dns-docs",
+  "version": "1.0.0",
+  "description": "Documentation for DNS CLI tool",
+  "type": "module",
+  "scripts": {
+    "docs:dev": "vitepress dev",
+    "docs:build": "vitepress build",
+    "docs:preview": "vitepress preview"
+  },
+  "devDependencies": {
+    "vitepress": "^1.6.3",
+    "typescript": "^5.6.3",
+    "vue": "^3.5.13"
+  }
+}

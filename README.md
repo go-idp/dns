@@ -9,18 +9,18 @@
 
 ## Installation
 
-### As a Library
-To install the package, run:
+### Install CLI Tool
+
 ```bash
 go install github.com/go-idp/dns/cmd/dns@latest
 ```
 
-### As a CLI Tool
-To build and install the CLI tool:
+Or build from source:
+
 ```bash
+git clone https://github.com/go-idp/dns.git
+cd dns
 go build -o bin/dns ./cmd/dns
-# Or install globally
-go install ./cmd/dns
 ```
 
 ## CLI Usage
@@ -116,90 +116,19 @@ upstream:
 
 ## Getting Started
 
-### Basic DNS Server
+### Quick Start
 
-```go
-func main() {
-	server := dns.NewServer(&dns.ServerOptions{
-		Port: 53,
-	})
-	client := dns.NewClient()
+After installation, you can start using the DNS CLI:
 
-	server.Handle(func(host string, typ int) ([]string, error) {
-		key := fmt.Sprintf("%s_%d", host, typ)
+```bash
+# Query a domain
+dns client --domain google.com
 
-		if host == "gozoox.com" {
-			return []string{"6.6.6.6"}, nil
-		}
-
-		if ips, err := client.LookUp(host, &dns.LookUpOptions{Typ: typ}); err != nil {
-			return nil, err
-		} else {
-			logger.Info("found host(%s %d) %v", host, typ, ips)
-			return ips, nil
-		}
-	})
-
-	server.Serve()
-}
+# Start a DNS server
+dns server --port 53
 ```
 
-### DNS-over-TLS (DoT) Client
-
-```go
-import (
-	"github.com/go-idp/dns"
-	"github.com/go-idp/dns/client"
-)
-
-// Use DoT server
-client := dns.NewClient(&dns.ClientOptions{
-	Servers: []string{"tls://1.1.1.1"}, // Cloudflare DoT
-	Timeout: 10 * time.Second,
-})
-
-// Lookup with DoT
-ips, err := client.LookUp("example.com")
-if err != nil {
-	log.Fatal(err)
-}
-fmt.Println("IPs:", ips)
-```
-
-### DNS-over-TLS (DoT) Server
-
-```go
-import (
-	"github.com/go-idp/dns"
-)
-
-// Create DoT server with TLS certificate
-server := dns.NewServer(&dns.ServerOptions{
-	Port:        53,  // Plain DNS port
-	DoTPort:     853, // DoT port (default)
-	EnableDoT:   true,
-	TLSCertFile: "/path/to/cert.pem",
-	TLSKeyFile:  "/path/to/key.pem",
-})
-
-// Or use tls.Config directly
-tlsConfig := &tls.Config{
-	Certificates: []tls.Certificate{cert},
-}
-server := dns.NewServer(&dns.ServerOptions{
-	Port:       53,
-	DoTPort:    853,
-	EnableDoT:  true,
-	TLSConfig:  tlsConfig,
-})
-
-server.Handle(func(host string, typ int) ([]string, error) {
-	// Your DNS resolution logic
-	return []string{"1.2.3.4"}, nil
-})
-
-server.Serve()
-```
+See the [documentation](https://go-idp.github.io/dns/) for more examples and detailed usage.
 
 ## Features
 
@@ -225,5 +154,10 @@ server.Serve()
 * [kenshinx/godns](https://github.com/kenshinx/godns) - A fast dns cache server written by go.
 * [miekg/dns](https://github.com/miekg/dns) - DNS library in Go.
 
+## Documentation
+
+Full documentation is available at: https://go-idp.github.io/dns/
+
 ## License
-GoZoox is released under the [MIT License](./LICENSE).
+
+MIT License - see [LICENSE](./LICENSE) for details.
