@@ -3,8 +3,10 @@ module github.com/go-idp/dns
 go 1.25.6
 
 require (
+	github.com/fsnotify/fsnotify v1.7.0
 	github.com/go-zoox/cli v1.5.0
-	github.com/go-zoox/dns v1.2.3
+	github.com/go-zoox/dns v1.2.4
+	github.com/go-zoox/fs v1.3.15
 	github.com/go-zoox/kv v1.1.7
 	github.com/go-zoox/logger v1.6.3
 	gopkg.in/yaml.v3 v3.0.1
@@ -19,7 +21,6 @@ require (
 	github.com/cpuguy83/go-md2man/v2 v2.0.4 // indirect
 	github.com/dgryski/go-rendezvous v0.0.0-20200823014737-9f7001d12a5f // indirect
 	github.com/fatih/color v1.17.0 // indirect
-	github.com/fsnotify/fsnotify v1.7.0 // indirect
 	github.com/go-redis/redis/v8 v8.11.5 // indirect
 	github.com/go-zoox/chalk v1.0.2 // indirect
 	github.com/go-zoox/config v1.4.0 // indirect
@@ -30,7 +31,6 @@ require (
 	github.com/go-zoox/encoding v1.2.1 // indirect
 	github.com/go-zoox/errors v1.0.2 // indirect
 	github.com/go-zoox/fetch v1.8.2 // indirect
-	github.com/go-zoox/fs v1.3.15 // indirect
 	github.com/go-zoox/headers v1.0.6 // indirect
 	github.com/go-zoox/ini v1.0.4 // indirect
 	github.com/go-zoox/tag v1.3.4 // indirect
