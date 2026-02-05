@@ -17,14 +17,14 @@ RUN CGO_ENABLED=0 \
   go build \
   -trimpath \
   -ldflags '-w -s -buildid=' \
-  -v -o pipeline ./cmd/pipeline
+  -v -o dns ./cmd/dns
 
 # Server
 FROM whatwewant/zmicro:v1.24
 
 LABEL MAINTAINER="Zero<tobewhatwewant@gmail.com>"
 
-LABEL org.opencontainers.image.source="https://github.com/go-idp/pipeline"
+LABEL org.opencontainers.image.source="https://github.com/go-idp/dns"
 
 RUN zmicro update -a
 
@@ -44,6 +44,6 @@ ARG VERSION=latest
 
 ENV VERSION=${VERSION}
 
-COPY --from=builder /build/pipeline /bin
+COPY --from=builder /build/dns /bin
 
-CMD pipeline server
+CMD dns server

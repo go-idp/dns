@@ -58,7 +58,7 @@ jobs:
         uses: zmicro-design/action-docker-image-meta@v1
         with:
           username: ${{ secrets.DOCKERHUB_USERNAME }}
-          name: go-idp-pipeline
+          name: go-idp-dns
 
       - name: Show Docker Tags
         run: |
