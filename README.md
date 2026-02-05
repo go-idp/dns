@@ -81,6 +81,7 @@ dot:
 
 # Custom domain mappings (highest priority)
 hosts:
+  # Simple format: single domain to single IP
   "example.com": "1.2.3.4"
   "www.example.com":
     - "1.2.3.4"
@@ -88,6 +89,12 @@ hosts:
   "dual.example.com":
     a: ["1.2.3.4"]
     aaaa: ["2001:db8::1"]
+  
+  # Wildcard pattern: matches any subdomain
+  "*.example.com": "1.2.3.4"
+  
+  # Regex pattern: matches domains using regular expressions
+  "^mp-\\w+\\.example\\.com$": "1.2.3.4"
 
 # Upstream DNS servers
 upstream:
@@ -101,7 +108,10 @@ upstream:
 - **Custom Hosts Mapping**: Define custom domain-to-IP mappings with highest priority
 - **Multiple IP Support**: Support multiple IPv4 and IPv6 addresses per domain
 - **Flexible Format**: Support simple string, list, or structured format
-- **Priority**: Custom hosts are checked before upstream DNS servers
+- **Wildcard Patterns**: Use `*.example.com` to match any subdomain
+- **Regex Patterns**: Use regular expressions like `^mp-\\w+\\.example\\.com$` for advanced matching
+- **System Hosts File**: Support for `/etc/hosts` with wildcard and regex patterns (enabled by default)
+- **Priority**: Custom hosts are checked before system hosts and upstream DNS servers
 - **Override**: Command line flags override config file values
 
 ## Getting Started

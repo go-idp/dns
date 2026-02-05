@@ -73,6 +73,46 @@ hosts:
       - "2001:db8::2"
 ```
 
+#### Wildcard Patterns
+
+Wildcard patterns use `*` to match any subdomain. The pattern `*.example.com` will match:
+- `sub.example.com`
+- `www.example.com`
+- `api.example.com`
+- etc.
+
+```yaml
+hosts:
+  "*.example.com": "1.2.3.4"
+  "*.local.dev": "127.0.0.1"
+```
+
+**Note:** Exact matches take priority over wildcard patterns. For example, if you have both `"www.example.com": "2.3.4.5"` and `"*.example.com": "1.2.3.4"`, a query for `www.example.com` will return `2.3.4.5`.
+
+#### Regex Patterns
+
+Regex patterns allow advanced domain matching using regular expressions. Patterns are automatically detected if they contain regex metacharacters and compile successfully.
+
+```yaml
+hosts:
+  # Match domains starting with "mp-" followed by word characters
+  "^mp-\\w+\\.example\\.com$": "1.2.3.4"
+  
+  # Match domains with specific pattern
+  "^api-v\\d+\\.example\\.com$": "1.2.3.4"
+```
+
+**Regex Pattern Rules:**
+- Patterns are detected automatically if they contain regex metacharacters (`^$+?()[]{}|\`)
+- Wildcard patterns (`*`) take priority over regex patterns
+- Use standard Go regex syntax
+- Patterns must compile successfully to be recognized as regex
+
+**Examples:**
+- `^mp-\\w+\\.example\\.com$` - Matches `mp-123.example.com`, `mp-abc.example.com`, etc.
+- `^api-v\\d+\\.example\\.com$` - Matches `api-v1.example.com`, `api-v2.example.com`, etc.
+- `.*\\.dev$` - Matches any domain ending with `.dev`
+
 ### Upstream DNS Servers
 
 Upstream DNS servers are used when custom hosts don't match the query.
@@ -87,10 +127,52 @@ upstream:
   timeout: "5s"              # Query timeout (default: 5s)
 ```
 
+### System Hosts File
+
+System hosts file lookup is **enabled by default** and checked after custom hosts but before upstream DNS servers.
+
+```yaml
+system_hosts:
+  disabled: false             # Disable system hosts file lookup (default: false, i.e., enabled)
+  file_path: "/etc/hosts"     # Path to hosts file (default: /etc/hosts)
+```
+
+**System Hosts File Format:**
+
+The system hosts file supports the same wildcard and regex patterns as configuration hosts:
+
+```
+# Standard format
+127.0.0.1 localhost
+10.1.0.169 frontend
+
+# Wildcard pattern
+1.2.3.4 *.example.com
+
+# Regex pattern
+1.2.3.4 ^mp-\w+\.example\.com
+```
+
+**Command Line Options:**
+
+```bash
+# Disable system hosts file
+dns server --disable-system-hosts
+
+# Use custom hosts file path
+dns server --system-hosts-file /custom/path/hosts
+```
+
 ## Priority Order
 
 1. **Custom Hosts** (from `hosts` section) - Highest priority
-2. **Upstream DNS Servers** (from `upstream.servers`) - Fallback
+   - Exact matches are checked first
+   - Wildcard patterns are checked next
+   - Regex patterns are checked last
+2. **System Hosts File** (`/etc/hosts` by default) - Second priority
+   - Supports wildcard and regex patterns
+   - Enabled by default (can be disabled with `--disable-system-hosts`)
+3. **Upstream DNS Servers** (from `upstream.servers`) - Fallback
 
 ## Command Line Override
 
