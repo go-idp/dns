@@ -47,12 +47,12 @@ type HostsConfig map[string]interface{}
 
 // HostMapping represents a parsed host mapping
 type HostMapping struct {
-	Domain    string
-	IPv4      []string
-	IPv6      []string
-	IsWildcard bool   // true if domain contains wildcard (*)
-	IsRegex   bool   // true if domain is a regex pattern (starts with ^)
-	Regex     *regexp.Regexp // compiled regex pattern if IsRegex is true
+	Domain     string
+	IPv4       []string
+	IPv6       []string
+	IsWildcard bool           // true if domain contains wildcard (*)
+	IsRegex    bool           // true if domain is a regex pattern (starts with ^)
+	Regex      *regexp.Regexp // compiled regex pattern if IsRegex is true
 }
 
 // SystemHostsConfig represents system hosts file configuration
@@ -114,28 +114,37 @@ func (c *Config) ParseHosts() (map[string]*HostMapping, error) {
 	for domain, value := range c.Hosts {
 		domain = strings.TrimSpace(domain)
 		domainLower := strings.ToLower(domain)
-		
-		// Check if it's a regex pattern (starts with ^)
-		isRegex := strings.HasPrefix(domain, "^")
-		// Check if it contains wildcard
+
+		// Check if it contains wildcard first (wildcard takes priority)
 		isWildcard := strings.Contains(domain, "*")
-		
+
+		// Try to determine if it's a regex pattern (only if not a wildcard)
+		var isRegex bool
+		var compiledRegex *regexp.Regexp
+		if !isWildcard {
+			// Try to compile as regex
+			if compiled, err := regexp.Compile(domain); err == nil {
+				// Check if it's actually a regex (not just a plain domain)
+				// A plain domain like "example.com" contains dots which are regex metacharacters
+				// but we want to treat it as a literal. We consider it a regex if it contains
+				// regex metacharacters beyond just dots
+				hasRegexMeta := strings.ContainsAny(domain, "^$+?()[]{}|\\")
+				// Also check if it has escaped characters or other regex features
+				hasEscape := strings.Contains(domain, "\\")
+				if hasRegexMeta || hasEscape {
+					isRegex = true
+					compiledRegex = compiled
+				}
+			}
+		}
+
 		mapping := &HostMapping{
 			Domain:     domainLower,
 			IPv4:       []string{},
 			IPv6:       []string{},
 			IsWildcard: isWildcard,
 			IsRegex:    isRegex,
-		}
-		
-		// Compile regex if it's a regex pattern
-		if isRegex {
-			// Use the domain as-is (YAML already handles escaping)
-			compiled, err := regexp.Compile(domain)
-			if err != nil {
-				return nil, fmt.Errorf("invalid regex pattern %s: %w", domain, err)
-			}
-			mapping.Regex = compiled
+			Regex:      compiledRegex,
 		}
 
 		switch v := value.(type) {
@@ -246,7 +255,7 @@ func (c *Config) LookupHost(domain string, queryType int) ([]string, error) {
 	// Try wildcard and regex patterns
 	for pattern, mapping := range hosts {
 		var matched bool
-		
+
 		if mapping.IsRegex && mapping.Regex != nil {
 			// Match against regex pattern
 			matched = mapping.Regex.MatchString(domain) || mapping.Regex.MatchString(domainNoDot)
@@ -254,7 +263,7 @@ func (c *Config) LookupHost(domain string, queryType int) ([]string, error) {
 			// Match against wildcard pattern
 			matched = MatchWildcard(domain, pattern) || MatchWildcard(domainNoDot, pattern)
 		}
-		
+
 		if matched {
 			if queryType == 4 { // A record
 				if len(mapping.IPv4) > 0 {
@@ -270,4 +279,3 @@ func (c *Config) LookupHost(domain string, queryType int) ([]string, error) {
 
 	return nil, fmt.Errorf("not found in hosts")
 }
-

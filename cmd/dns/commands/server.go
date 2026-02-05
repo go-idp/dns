@@ -1,7 +1,6 @@
 package commands
 
 import (
-	"bufio"
 	"fmt"
 	"os"
 	"os/signal"
@@ -14,6 +13,7 @@ import (
 	"github.com/go-zoox/cli"
 	"github.com/go-zoox/dns"
 	"github.com/go-zoox/dns/client"
+	"github.com/go-zoox/fs/type/hosts"
 	"github.com/go-zoox/logger"
 )
 
@@ -26,68 +26,65 @@ type SystemHostsEntry struct {
 	Regex      *regexp.Regexp
 }
 
-// parseSystemHostsFile parses a system hosts file with support for wildcard and regex patterns
-func parseSystemHostsFile(filePath string) ([]SystemHostsEntry, error) {
-	file, err := os.Open(filePath)
-	if err != nil {
-		return nil, err
+// isRegexPattern checks if a string is a valid regex pattern
+// Wildcard patterns take priority, so we only check for regex if it doesn't contain *
+func isRegexPattern(pattern string) bool {
+	// Wildcard takes priority
+	if strings.Contains(pattern, "*") {
+		return false
 	}
-	defer file.Close()
+	
+	// Try to compile as regex
+	if _, err := regexp.Compile(pattern); err != nil {
+		return false
+	}
+	
+	// Check if it contains regex metacharacters (beyond just dots)
+	hasRegexMeta := strings.ContainsAny(pattern, "^$+?()[]{}|\\")
+	return hasRegexMeta
+}
+
+// parseSystemHostsFile parses a system hosts file with support for wildcard and regex patterns
+// Uses github.com/go-zoox/fs/type/hosts to parse the file, then enhances entries with pattern matching
+func parseSystemHostsFile(filePath string) ([]SystemHostsEntry, error) {
+	hostsParser := hosts.New(filePath)
+	if err := hostsParser.Load(); err != nil {
+		return nil, fmt.Errorf("failed to load hosts file: %w", err)
+	}
 
 	var entries []SystemHostsEntry
-	scanner := bufio.NewScanner(file)
 
-	for scanner.Scan() {
-		line := strings.TrimSpace(scanner.Text())
-		
-		// Skip empty lines and comments
-		if line == "" || strings.HasPrefix(line, "#") {
+	// Iterate through the hosts mapping
+	for domain, ip := range hostsParser.Mapping {
+		domain = strings.TrimSpace(domain)
+		if domain == "" {
 			continue
 		}
 
-		// Split by whitespace
-		fields := strings.Fields(line)
-		if len(fields) < 2 {
-			continue
+		// Try to determine if it's a regex pattern by attempting to compile it
+		isRegex := isRegexPattern(domain)
+		// Check if it contains wildcard (but not if it's already a regex)
+		isWildcard := !isRegex && strings.Contains(domain, "*")
+
+		entry := SystemHostsEntry{
+			IP:         ip,
+			Domain:     strings.ToLower(domain),
+			IsWildcard: isWildcard,
+			IsRegex:    isRegex,
 		}
 
-		ip := fields[0]
-		domains := fields[1:]
-
-		for _, domain := range domains {
-			domain = strings.TrimSpace(domain)
-			if domain == "" {
+		// Compile regex if it's a regex pattern
+		if isRegex {
+			compiled, err := regexp.Compile(domain)
+			if err != nil {
+				// This shouldn't happen since we already checked, but handle it anyway
+				logger.Warn("Failed to compile regex pattern in hosts file: %s, error: %v", domain, err)
 				continue
 			}
-
-			// Check if it's a regex pattern (starts with ^)
-			isRegex := strings.HasPrefix(domain, "^")
-			// Check if it contains wildcard
-			isWildcard := strings.Contains(domain, "*")
-
-			entry := SystemHostsEntry{
-				IP:         ip,
-				Domain:     strings.ToLower(domain),
-				IsWildcard: isWildcard,
-				IsRegex:    isRegex,
-			}
-
-			// Compile regex if it's a regex pattern
-			if isRegex {
-				compiled, err := regexp.Compile(domain)
-				if err != nil {
-					logger.Warn("Invalid regex pattern in hosts file: %s, error: %v", domain, err)
-					continue
-				}
-				entry.Regex = compiled
-			}
-
-			entries = append(entries, entry)
+			entry.Regex = compiled
 		}
-	}
 
-	if err := scanner.Err(); err != nil {
-		return nil, fmt.Errorf("error reading hosts file: %w", err)
+		entries = append(entries, entry)
 	}
 
 	return entries, nil

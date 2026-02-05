@@ -463,7 +463,7 @@ func TestParseHosts_EmptyHosts(t *testing.T) {
 func TestLookupHost_Wildcard(t *testing.T) {
 	cfg := &Config{
 		Hosts: HostsConfig{
-			"*.example.com": "1.2.3.4",
+			"*.example.com":    "1.2.3.4",
 			"test.example.com": "2.3.4.5",
 		},
 	}
@@ -500,7 +500,7 @@ func TestLookupHost_Regex(t *testing.T) {
 	cfg := &Config{
 		Hosts: HostsConfig{
 			"^mp-\\w+\\.example\\.com$": "1.2.3.4",
-			"test.example.com": "2.3.4.5",
+			"test.example.com":          "2.3.4.5",
 		},
 	}
 
