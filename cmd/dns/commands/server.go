@@ -184,15 +184,15 @@ func parseResolvConf(resolvConfPath string, serverHost string) ([]string, error)
 
 	var nameservers []string
 	scanner := bufio.NewScanner(file)
-	
+
 	// Track localhost IPs to filter out
 	localIPs := map[string]bool{
-		"127.0.0.1":   true,
-		"::1":         true,
-		"localhost":   true,
-		"0.0.0.0":     true,
+		"127.0.0.1": true,
+		"::1":       true,
+		"localhost": true,
+		"0.0.0.0":   true,
 	}
-	
+
 	// Add server host to local IPs if it's a local address
 	if serverHost != "" && serverHost != "0.0.0.0" {
 		// Check if serverHost is a local IP
@@ -214,14 +214,14 @@ func parseResolvConf(resolvConfPath string, serverHost string) ([]string, error)
 		fields := strings.Fields(line)
 		if len(fields) >= 2 && strings.ToLower(fields[0]) == "nameserver" {
 			addr := strings.TrimSpace(fields[1])
-			
+
 			// Skip localhost addresses
 			addrLower := strings.ToLower(addr)
 			if localIPs[addrLower] || localIPs[addr] {
 				logger.Debug("Skipping local nameserver: %s", addr)
 				continue
 			}
-			
+
 			// Check if it's a loopback IP
 			if ip := net.ParseIP(addr); ip != nil {
 				if ip.IsLoopback() || ip.IsUnspecified() {
@@ -229,12 +229,12 @@ func parseResolvConf(resolvConfPath string, serverHost string) ([]string, error)
 					continue
 				}
 			}
-			
+
 			// Add default port if not specified
 			if !strings.Contains(addr, ":") {
 				addr = addr + ":53"
 			}
-			
+
 			nameservers = append(nameservers, addr)
 		}
 	}
