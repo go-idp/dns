@@ -18,9 +18,17 @@ dot:
 # Custom domain mappings (highest priority, checked before system hosts and upstream DNS)
 # These mappings take precedence over system hosts file and upstream DNS servers
 hosts:
-  # Simple format: single domain to single IP
+  # Simple format: single domain to single IP (backward compatible)
   "example.com": "1.2.3.4"
   "test.local": "192.168.1.100"
+
+  # Alias target (CNAME-like flattening):
+  # if value is a domain (not an IP), it will be resolved via upstream.
+  "mysql.ops.ys.idp.internal": "db.tencentcloud.com"
+
+  # Explicit alias format (extension)
+  "redis.ops.ys.idp.internal":
+    cname: "redis.tencentcloud.com"
   
   # Multiple IPv4 addresses for a domain (A records)
   "www.example.com":
@@ -30,7 +38,7 @@ hosts:
   # IPv6 address (AAAA record)
   "ipv6.example.com": "2001:db8::1"
   
-  # Both IPv4 and IPv6 addresses
+  # Both IPv4 and IPv6 addresses (structured format)
   "dual.example.com":
     a:     # IPv4 addresses (A records)
       - "1.2.3.4"

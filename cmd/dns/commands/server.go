@@ -638,7 +638,23 @@ func NewServerCommand() *cli.Command {
 						logger.Info("[channel: config.hosts] Resolved %s (%s) from config hosts -> %v", hostname, queryType, ips)
 						return ips, nil
 					}
-					logger.Debug("No match found in config hosts for %s (%s)", hostname, queryType)
+
+					// Support alias target in hosts config:
+					// if hostname maps to a domain alias, resolve that alias via upstream.
+					aliasTarget, aliasErr := cfg.LookupAlias(hostname)
+					if aliasErr == nil && aliasTarget != "" {
+						logger.Debug("Config alias match for %s (%s): %s, querying upstream", hostname, queryType, aliasTarget)
+						aliasIPs, upstreamErr := upstreamClient.LookUp(aliasTarget, &client.LookUpOptions{
+							Typ: typ,
+						})
+						if upstreamErr == nil && len(aliasIPs) > 0 {
+							logger.Info("[channel: config.alias] Resolved %s (%s) via alias %s -> %v", hostname, queryType, aliasTarget, aliasIPs)
+							return aliasIPs, nil
+						}
+						logger.Warn("Failed to resolve alias target %s for %s (%s): %v", aliasTarget, hostname, queryType, upstreamErr)
+					}
+
+					logger.Debug("No match found in config hosts/alias for %s (%s)", hostname, queryType)
 				} else {
 					logger.Debug("Config hosts not available, skipping priority 1")
 				}

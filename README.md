@@ -116,8 +116,19 @@ doq:
 
 # Custom domain mappings (highest priority)
 hosts:
-  # Simple format: single domain to single IP
+  # Simple format: single domain to single IP (backward compatible)
   "example.com": "1.2.3.4"
+  
+  # Alias target (CNAME-like flattening):
+  # If value is not an IP, it is treated as an alias target domain.
+  # Querying A/AAAA for mysql.ops.ys.idp.internal will resolve
+  # db.tencentcloud.com via upstream and return final IPs.
+  "mysql.ops.ys.idp.internal": "db.tencentcloud.com"
+
+  # Explicit alias format (extension)
+  "redis.ops.ys.idp.internal":
+    cname: "redis.tencentcloud.com"
+
   "www.example.com":
     - "1.2.3.4"
     - "1.2.3.5"
@@ -143,6 +154,7 @@ upstream:
 - **Custom Hosts Mapping**: Define custom domain-to-IP mappings with highest priority
 - **Multiple IP Support**: Support multiple IPv4 and IPv6 addresses per domain
 - **Flexible Format**: Support simple string, list, or structured format
+- **Alias Support**: String domain values or `cname` field map local names to upstream domains (returns A/AAAA IPs)
 - **Wildcard Patterns**: Use `*.example.com` to match any subdomain
 - **Regex Patterns**: Use regular expressions like `^mp-\\w+\\.example\\.com$` for advanced matching
 - **System Hosts File**: Support for `/etc/hosts` with wildcard and regex patterns (enabled by default)

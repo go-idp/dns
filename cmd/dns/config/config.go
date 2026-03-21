@@ -2,6 +2,7 @@ package config
 
 import (
 	"fmt"
+	"net"
 	"os"
 	"regexp"
 	"strings"
@@ -63,12 +64,13 @@ type HostsConfig map[string]interface{}
 
 // HostMapping represents a parsed host mapping
 type HostMapping struct {
-	Domain     string
-	IPv4       []string
-	IPv6       []string
-	IsWildcard bool           // true if domain contains wildcard (*)
-	IsRegex    bool           // true if domain is a regex pattern (starts with ^)
-	Regex      *regexp.Regexp // compiled regex pattern if IsRegex is true
+	Domain      string
+	IPv4        []string
+	IPv6        []string
+	AliasTarget string
+	IsWildcard  bool           // true if domain contains wildcard (*)
+	IsRegex     bool           // true if domain is a regex pattern (starts with ^)
+	Regex       *regexp.Regexp // compiled regex pattern if IsRegex is true
 }
 
 // SystemHostsConfig represents system hosts file configuration
@@ -171,49 +173,73 @@ func (c *Config) ParseHosts() (map[string]*HostMapping, error) {
 
 		switch v := value.(type) {
 		case string:
-			// Simple format: "example.com": "1.2.3.4"
-			ip := strings.TrimSpace(v)
-			if IsIPv6(ip) {
-				mapping.IPv6 = append(mapping.IPv6, ip)
-			} else {
-				mapping.IPv4 = append(mapping.IPv4, ip)
+			// Compatible format:
+			//   - "example.com": "1.2.3.4" (IP mapping)
+			//   - "example.com": "target.domain.com" (alias target)
+			valueStr := strings.TrimSpace(v)
+			if parsedIP := net.ParseIP(valueStr); parsedIP != nil {
+				if parsedIP.To4() != nil {
+					mapping.IPv4 = append(mapping.IPv4, valueStr)
+				} else {
+					mapping.IPv6 = append(mapping.IPv6, valueStr)
+				}
+			} else if valueStr != "" {
+				mapping.AliasTarget = strings.ToLower(strings.TrimSuffix(valueStr, "."))
 			}
 
 		case []interface{}:
 			// Multiple IPs: "example.com": ["1.2.3.4", "1.2.3.5"]
 			for _, item := range v {
 				ip := strings.TrimSpace(fmt.Sprintf("%v", item))
-				if IsIPv6(ip) {
-					mapping.IPv6 = append(mapping.IPv6, ip)
-				} else {
-					mapping.IPv4 = append(mapping.IPv4, ip)
+				if parsedIP := net.ParseIP(ip); parsedIP != nil {
+					if parsedIP.To4() != nil {
+						mapping.IPv4 = append(mapping.IPv4, ip)
+					} else {
+						mapping.IPv6 = append(mapping.IPv6, ip)
+					}
 				}
 			}
 
 		case map[string]interface{}:
-			// Structured format: "example.com": {"a": [...], "aaaa": [...]}
+			// Structured format: "example.com": {"a": [...], "aaaa": [...], "cname": "..."}
 			if aList, ok := v["a"].([]interface{}); ok {
 				for _, item := range aList {
 					ip := strings.TrimSpace(fmt.Sprintf("%v", item))
-					mapping.IPv4 = append(mapping.IPv4, ip)
+					if parsedIP := net.ParseIP(ip); parsedIP != nil && parsedIP.To4() != nil {
+						mapping.IPv4 = append(mapping.IPv4, ip)
+					}
 				}
 			}
 			if aaaaList, ok := v["aaaa"].([]interface{}); ok {
 				for _, item := range aaaaList {
 					ip := strings.TrimSpace(fmt.Sprintf("%v", item))
-					mapping.IPv6 = append(mapping.IPv6, ip)
+					if parsedIP := net.ParseIP(ip); parsedIP != nil && parsedIP.To4() == nil {
+						mapping.IPv6 = append(mapping.IPv6, ip)
+					}
 				}
 			}
 			// Also support single string values
 			if aStr, ok := v["a"].(string); ok {
-				mapping.IPv4 = append(mapping.IPv4, strings.TrimSpace(aStr))
+				ip := strings.TrimSpace(aStr)
+				if parsedIP := net.ParseIP(ip); parsedIP != nil && parsedIP.To4() != nil {
+					mapping.IPv4 = append(mapping.IPv4, ip)
+				}
 			}
 			if aaaaStr, ok := v["aaaa"].(string); ok {
-				mapping.IPv6 = append(mapping.IPv6, strings.TrimSpace(aaaaStr))
+				ip := strings.TrimSpace(aaaaStr)
+				if parsedIP := net.ParseIP(ip); parsedIP != nil && parsedIP.To4() == nil {
+					mapping.IPv6 = append(mapping.IPv6, ip)
+				}
+			}
+			if cnameStr, ok := v["cname"].(string); ok {
+				alias := strings.ToLower(strings.TrimSpace(strings.TrimSuffix(cnameStr, ".")))
+				if alias != "" {
+					mapping.AliasTarget = alias
+				}
 			}
 		}
 
-		if len(mapping.IPv4) > 0 || len(mapping.IPv6) > 0 {
+		if len(mapping.IPv4) > 0 || len(mapping.IPv6) > 0 || mapping.AliasTarget != "" {
 			hosts[domainLower] = mapping
 		}
 	}
@@ -300,4 +326,47 @@ func (c *Config) LookupHost(domain string, queryType int) ([]string, error) {
 	}
 
 	return nil, fmt.Errorf("not found in hosts")
+}
+
+// LookupAlias looks up a domain alias target in the hosts configuration.
+// It supports exact, wildcard, and regex matching similar to LookupHost.
+func (c *Config) LookupAlias(domain string) (string, error) {
+	hosts, err := c.ParseHosts()
+	if err != nil {
+		return "", err
+	}
+
+	domain = strings.ToLower(strings.TrimSpace(domain))
+	domainNoDot := strings.TrimSuffix(domain, ".")
+
+	// Try exact match first
+	if mapping, ok := hosts[domain]; ok && !mapping.IsWildcard && !mapping.IsRegex {
+		if mapping.AliasTarget != "" {
+			return mapping.AliasTarget, nil
+		}
+	}
+
+	// Try with trailing dot removed
+	if mapping, ok := hosts[domainNoDot]; ok && !mapping.IsWildcard && !mapping.IsRegex {
+		if mapping.AliasTarget != "" {
+			return mapping.AliasTarget, nil
+		}
+	}
+
+	// Try wildcard and regex patterns
+	for pattern, mapping := range hosts {
+		var matched bool
+
+		if mapping.IsRegex && mapping.Regex != nil {
+			matched = mapping.Regex.MatchString(domain) || mapping.Regex.MatchString(domainNoDot)
+		} else if mapping.IsWildcard {
+			matched = MatchWildcard(domain, pattern) || MatchWildcard(domainNoDot, pattern)
+		}
+
+		if matched && mapping.AliasTarget != "" {
+			return mapping.AliasTarget, nil
+		}
+	}
+
+	return "", fmt.Errorf("not found in hosts")
 }

@@ -557,6 +557,78 @@ func TestParseHosts_WhitespaceHandling(t *testing.T) {
 	}
 }
 
+func TestParseHosts_StringDomainAsAlias(t *testing.T) {
+	cfg := &Config{
+		Hosts: HostsConfig{
+			"mysql.idp.internal": "cdb.tencentcloudapi.com",
+		},
+	}
+
+	hosts, err := cfg.ParseHosts()
+	if err != nil {
+		t.Fatalf("Failed to parse hosts: %v", err)
+	}
+
+	mapping, ok := hosts["mysql.idp.internal"]
+	if !ok {
+		t.Fatal("expected mysql.idp.internal mapping")
+	}
+	if len(mapping.IPv4) != 0 || len(mapping.IPv6) != 0 {
+		t.Errorf("expected no IP records for alias mapping, got IPv4=%v IPv6=%v", mapping.IPv4, mapping.IPv6)
+	}
+	if mapping.AliasTarget != "cdb.tencentcloudapi.com" {
+		t.Errorf("expected alias target cdb.tencentcloudapi.com, got %s", mapping.AliasTarget)
+	}
+}
+
+func TestParseHosts_StructuredCNAME(t *testing.T) {
+	cfg := &Config{
+		Hosts: HostsConfig{
+			"mysql.idp.internal": map[string]interface{}{
+				"cname": "db.tencentcloud.com.",
+			},
+		},
+	}
+
+	hosts, err := cfg.ParseHosts()
+	if err != nil {
+		t.Fatalf("Failed to parse hosts: %v", err)
+	}
+
+	mapping, ok := hosts["mysql.idp.internal"]
+	if !ok {
+		t.Fatal("expected mysql.idp.internal mapping")
+	}
+	if mapping.AliasTarget != "db.tencentcloud.com" {
+		t.Errorf("expected normalized alias target db.tencentcloud.com, got %s", mapping.AliasTarget)
+	}
+}
+
+func TestLookupAlias_ExactAndWildcard(t *testing.T) {
+	cfg := &Config{
+		Hosts: HostsConfig{
+			"mysql.idp.internal": "db.tencentcloud.com",
+			"*.alias.internal":          "pool.tencentcloud.com",
+		},
+	}
+
+	target, err := cfg.LookupAlias("mysql.idp.internal")
+	if err != nil {
+		t.Fatalf("Failed to lookup exact alias: %v", err)
+	}
+	if target != "db.tencentcloud.com" {
+		t.Errorf("expected db.tencentcloud.com, got %s", target)
+	}
+
+	target, err = cfg.LookupAlias("api.alias.internal")
+	if err != nil {
+		t.Fatalf("Failed to lookup wildcard alias: %v", err)
+	}
+	if target != "pool.tencentcloud.com" {
+		t.Errorf("expected pool.tencentcloud.com, got %s", target)
+	}
+}
+
 func TestLoadConfig_SystemHosts_Disabled(t *testing.T) {
 	tmpDir := t.TempDir()
 	configFile := filepath.Join(tmpDir, "test.yaml")

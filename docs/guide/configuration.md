@@ -37,8 +37,16 @@ doq:
 
 # Custom domain mappings (highest priority)
 hosts:
-  # Simple format: single domain to single IP
+  # Simple format: single domain to single IP (backward compatible)
   "example.com": "1.2.3.4"
+
+  # Alias target (CNAME-like flattening):
+  # if value is a domain (not an IP), it is treated as alias target
+  "mysql.ops.ys.idp.internal": "db.tencentcloud.com"
+
+  # Explicit alias format (extension)
+  "redis.ops.ys.idp.internal":
+    cname: "redis.tencentcloud.com"
   
   # Multiple IPv4 addresses
   "www.example.com":
@@ -110,6 +118,25 @@ hosts:
       - "2001:db8::1"
       - "2001:db8::2"
 ```
+
+### Alias Target (CNAME-like)
+
+Map a local domain to an upstream domain while still returning final A/AAAA IPs:
+
+```yaml
+hosts:
+  # Compatible short form: string domain value
+  "mysql.ops.ys.idp.internal": "db.tencentcloud.com"
+
+  # Explicit extension form
+  "redis.ops.ys.idp.internal":
+    cname: "redis.tencentcloud.com"
+```
+
+Notes:
+- Existing IP mapping behavior is unchanged.
+- If a string value is not a valid IP, it is treated as an alias target domain.
+- Responses for alias mappings are flattened A/AAAA results (not raw CNAME records).
 
 ### Wildcard Patterns
 

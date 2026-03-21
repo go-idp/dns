@@ -17,6 +17,11 @@ dot:
 
 hosts:
   "example.com": "1.2.3.4"
+  # Alias target (CNAME-like flattening)
+  "mysql.ops.ys.idp.internal": "db.tencentcloud.com"
+  # Explicit alias format (extension)
+  "redis.ops.ys.idp.internal":
+    cname: "redis.tencentcloud.com"
   "www.example.com":
     - "1.2.3.4"
     - "1.2.3.5"
