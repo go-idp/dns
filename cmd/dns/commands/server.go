@@ -24,11 +24,12 @@ import (
 
 // SystemHostsEntry represents an entry in the system hosts file
 type SystemHostsEntry struct {
-	IP         string
-	Domain     string
-	IsWildcard bool
-	IsRegex    bool
-	Regex      *regexp.Regexp
+	IP          string
+	AliasTarget string
+	Domain      string
+	IsWildcard  bool
+	IsRegex     bool
+	Regex       *regexp.Regexp
 }
 
 // isRegexPattern checks if a string is a valid regex pattern
@@ -85,10 +86,17 @@ func parseSystemHostsFile(filePath string) ([]SystemHostsEntry, error) {
 			isWildcard := !isRegex && strings.Contains(domain, "*")
 
 			entry = &SystemHostsEntry{
-				IP:         ip,
 				Domain:     domainLower,
 				IsWildcard: isWildcard,
 				IsRegex:    isRegex,
+			}
+
+			// Support alias target in hosts file:
+			// if the value is not a valid IP, treat it as alias target domain.
+			if parsedIP := net.ParseIP(ip); parsedIP != nil {
+				entry.IP = ip
+			} else {
+				entry.AliasTarget = strings.ToLower(strings.TrimSpace(strings.TrimSuffix(ip, ".")))
 			}
 
 			// Compile regex if it's a regex pattern
@@ -128,6 +136,9 @@ func lookupSystemHosts(entries []SystemHostsEntry, domain string, queryType int)
 		if !entry.IsWildcard && !entry.IsRegex {
 			logger.Debug("Checking exact match: entry.Domain=%s, domain=%s, domainNoDot=%s", entry.Domain, domain, domainNoDot)
 			if entry.Domain == domain || entry.Domain == domainNoDot {
+				if entry.IP == "" {
+					continue
+				}
 				// Check if IP matches query type
 				if queryType == 4 && !config.IsIPv6(entry.IP) {
 					logger.Debug("Found exact match: %s -> %s", entry.Domain, entry.IP)
@@ -159,6 +170,9 @@ func lookupSystemHosts(entries []SystemHostsEntry, domain string, queryType int)
 		}
 
 		if matched {
+			if entry.IP == "" {
+				continue
+			}
 			// Check if IP matches query type
 			if queryType == 4 && !config.IsIPv6(entry.IP) {
 				return entry.IP, nil
@@ -169,6 +183,38 @@ func lookupSystemHosts(entries []SystemHostsEntry, domain string, queryType int)
 	}
 
 	logger.Debug("No match found for domain: %s", domain)
+	return "", fmt.Errorf("not found")
+}
+
+// lookupSystemHostsAlias looks up alias target from system hosts entries.
+func lookupSystemHostsAlias(entries []SystemHostsEntry, domain string) (string, error) {
+	domain = strings.ToLower(strings.TrimSpace(domain))
+	domainNoDot := strings.TrimSuffix(domain, ".")
+
+	// First try exact matches
+	for _, entry := range entries {
+		if !entry.IsWildcard && !entry.IsRegex {
+			if (entry.Domain == domain || entry.Domain == domainNoDot) && entry.AliasTarget != "" {
+				return entry.AliasTarget, nil
+			}
+		}
+	}
+
+	// Then try wildcard and regex patterns
+	for _, entry := range entries {
+		var matched bool
+
+		if entry.IsRegex && entry.Regex != nil {
+			matched = entry.Regex.MatchString(domain) || entry.Regex.MatchString(domainNoDot)
+		} else if entry.IsWildcard {
+			matched = config.MatchWildcard(domain, entry.Domain) || config.MatchWildcard(domainNoDot, entry.Domain)
+		}
+
+		if matched && entry.AliasTarget != "" {
+			return entry.AliasTarget, nil
+		}
+	}
+
 	return "", fmt.Errorf("not found")
 }
 
@@ -671,6 +717,22 @@ func NewServerCommand() *cli.Command {
 						logger.Info("[channel: system.hosts] Resolved %s (%s) from system hosts -> %v", hostname, queryType, []string{ip})
 						return []string{ip}, nil
 					}
+
+					// Support alias target in system hosts:
+					// if hostname maps to an alias domain, resolve it via upstream.
+					aliasTarget, aliasErr := lookupSystemHostsAlias(entries, hostname)
+					if aliasErr == nil && aliasTarget != "" {
+						logger.Debug("System hosts alias match for %s (%s): %s, querying upstream", hostname, queryType, aliasTarget)
+						aliasIPs, upstreamErr := upstreamClient.LookUp(aliasTarget, &client.LookUpOptions{
+							Typ: typ,
+						})
+						if upstreamErr == nil && len(aliasIPs) > 0 {
+							logger.Info("[channel: system.alias] Resolved %s (%s) via alias %s -> %v", hostname, queryType, aliasTarget, aliasIPs)
+							return aliasIPs, nil
+						}
+						logger.Warn("Failed to resolve system alias target %s for %s (%s): %v", aliasTarget, hostname, queryType, upstreamErr)
+					}
+
 					logger.Debug("No match found in system hosts for %s (%s), error: %v", hostname, queryType, err)
 				} else {
 					logger.Debug("System hosts not enabled or empty, skipping priority 2")
