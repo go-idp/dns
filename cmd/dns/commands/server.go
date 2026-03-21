@@ -218,6 +218,16 @@ func lookupSystemHostsAlias(entries []SystemHostsEntry, domain string) (string, 
 	return "", fmt.Errorf("not found")
 }
 
+// isUpstreamNotFoundError checks if upstream returned DNS rcode 3 (Name Error/NXDOMAIN).
+// Some upstream clients expose this as an error string like "failed to query with code: 3".
+func isUpstreamNotFoundError(err error) bool {
+	if err == nil {
+		return false
+	}
+	message := strings.ToLower(err.Error())
+	return strings.Contains(message, "code: 3")
+}
+
 // parseResolvConf parses /etc/resolv.conf and extracts nameserver entries
 // Returns a list of nameserver addresses (with port if not specified, default is :53)
 // Filters out localhost and the server's own listening address
@@ -697,6 +707,10 @@ func NewServerCommand() *cli.Command {
 							logger.Info("[channel: config.alias] Resolved %s (%s) via alias %s -> %v", hostname, queryType, aliasTarget, aliasIPs)
 							return aliasIPs, nil
 						}
+						if isUpstreamNotFoundError(upstreamErr) {
+							logger.Debug("Alias target %s has no %s record, returning empty answer", aliasTarget, queryType)
+							return []string{}, nil
+						}
 						logger.Warn("Failed to resolve alias target %s for %s (%s): %v", aliasTarget, hostname, queryType, upstreamErr)
 					}
 
@@ -730,6 +744,10 @@ func NewServerCommand() *cli.Command {
 							logger.Info("[channel: system.alias] Resolved %s (%s) via alias %s -> %v", hostname, queryType, aliasTarget, aliasIPs)
 							return aliasIPs, nil
 						}
+						if isUpstreamNotFoundError(upstreamErr) {
+							logger.Debug("System alias target %s has no %s record, returning empty answer", aliasTarget, queryType)
+							return []string{}, nil
+						}
 						logger.Warn("Failed to resolve system alias target %s for %s (%s): %v", aliasTarget, hostname, queryType, upstreamErr)
 					}
 
@@ -744,6 +762,10 @@ func NewServerCommand() *cli.Command {
 					Typ: typ,
 				})
 				if err != nil {
+					if isUpstreamNotFoundError(err) {
+						logger.Debug("Upstream returned not found for %s (%s), returning empty answer", hostname, queryType)
+						return []string{}, nil
+					}
 					logger.Error("Failed to resolve %s (%s) from upstream: %v", hostname, queryType, err)
 					return nil, err
 				}
