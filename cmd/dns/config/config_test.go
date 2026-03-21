@@ -608,7 +608,7 @@ func TestLookupAlias_ExactAndWildcard(t *testing.T) {
 	cfg := &Config{
 		Hosts: HostsConfig{
 			"mysql.idp.internal": "db.tencentcloud.com",
-			"*.alias.internal":          "pool.tencentcloud.com",
+			"*.alias.internal":   "pool.tencentcloud.com",
 		},
 	}
 
