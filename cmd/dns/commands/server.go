@@ -498,13 +498,9 @@ func NewServerCommand() *cli.Command {
 				EnvVars: []string{"DNS_SYSTEM_HOSTS_FILE"},
 			},
 			&cli.BoolFlag{
-				Name:    "cache",
-				Usage:   "Enable in-memory cache for upstream-derived answers",
-				EnvVars: []string{"DNS_CACHE"},
-			},
-			&cli.BoolFlag{
-				Name:  "no-cache",
-				Usage: "Disable response cache even if enabled in config file",
+				Name:    "disable-cache",
+				Usage:   "Disable in-memory response cache (enabled by default)",
+				EnvVars: []string{"DNS_DISABLE_CACHE"},
 			},
 			&cli.StringFlag{
 				Name:    "cache-ttl",
@@ -615,13 +611,11 @@ func NewServerCommand() *cli.Command {
 				}
 			}
 
-			cacheEnabled := false
-			if !ctx.Bool("no-cache") {
-				if ctx.Bool("cache") {
-					cacheEnabled = true
-				} else if cfg != nil && cfg.Cache.Enabled {
-					cacheEnabled = true
-				}
+			cacheEnabled := true
+			if ctx.Bool("disable-cache") {
+				cacheEnabled = false
+			} else if cfg != nil && !cfg.Cache.EffectiveCacheEnabled() {
+				cacheEnabled = false
 			}
 			cachePosTTL, err := time.ParseDuration(strings.TrimSpace(ctx.String("cache-ttl")))
 			if err != nil {
@@ -636,7 +630,7 @@ func NewServerCommand() *cli.Command {
 				cacheMaxEntries = config.DNSCacheMaxEntriesDefault
 			}
 			// Config overrides flag defaults unless the flag was set explicitly on the CLI.
-			if cfg != nil && cfg.Cache.Enabled {
+			if cfg != nil && cfg.Cache.EffectiveCacheEnabled() {
 				if !ctx.IsSet("cache-ttl") {
 					if d, err := time.ParseDuration(cfg.Cache.PositiveTTL); err == nil {
 						cachePosTTL = d

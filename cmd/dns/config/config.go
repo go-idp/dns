@@ -25,13 +25,25 @@ type Config struct {
 // CacheConfig enables in-memory caching of answers that required upstream resolution.
 // Static hosts / /etc/hosts hits are not cached (they do not use upstream).
 type CacheConfig struct {
-	Enabled     bool   `yaml:"enabled"`
+	// Enabled, when nil after YAML load, means "on" (default). Explicit false disables.
+	Enabled     *bool  `yaml:"enabled"`
 	PositiveTTL string `yaml:"positive_ttl"` // TTL for answers with at least one IP
 	NegativeTTL string `yaml:"negative_ttl"` // TTL for empty / NXDOMAIN-style answers
 	MaxEntries  int    `yaml:"max_entries"`  // 0 = use DNSCacheMaxEntriesDefault
 }
 
-// Defaults when cache is enabled (--cache or cache.enabled) and a field is omitted.
+// EffectiveCacheEnabled reports whether caching should be used. Omitted "enabled" defaults to true.
+func (c *CacheConfig) EffectiveCacheEnabled() bool {
+	if c == nil {
+		return true
+	}
+	if c.Enabled == nil {
+		return true
+	}
+	return *c.Enabled
+}
+
+// Defaults when cache is on (default, or cache.enabled: true) and a field is omitted.
 // Rationale: ~5m positive TTL matches many public DNS minima; short negative TTL limits stale NXDOMAIN;
 // 10k entries is a safe default footprint for small/medium resolvers.
 const (
@@ -40,9 +52,9 @@ const (
 	DNSCacheMaxEntriesDefault  = 10000
 )
 
-// applyDNSCacheDefaults fills omitted cache fields when cache.enabled is true.
+// applyDNSCacheDefaults fills omitted cache fields when cache is effectively enabled.
 func applyDNSCacheDefaults(c *CacheConfig) {
-	if !c.Enabled {
+	if !c.EffectiveCacheEnabled() {
 		return
 	}
 	if c.PositiveTTL == "" {

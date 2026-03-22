@@ -82,7 +82,7 @@ dns server --config /path/to/config.yaml
 dns server --config /path/to/config.yaml --port 5353
 ```
 
-**High QPS:** successful answers are logged at **debug** only; raise the logger to debug when troubleshooting. Tune `upstream.servers` and `upstream.timeout`. Enable **response cache** so repeat queries avoid upstream: `dns server --cache` or `cache.enabled` in YAML.
+**High QPS:** successful answers are logged at **debug** only; raise the logger to debug when troubleshooting. Tune `upstream.servers` and `upstream.timeout`. **Response cache** is **on by default** for upstream-derived answers; turn it off with `dns server --disable-cache` or `cache.enabled: false` in YAML.
 
 ### Configuration File
 
@@ -149,10 +149,10 @@ hosts:
   # Regex pattern: matches domains using regular expressions
   "^mp-\\w+\\.example\\.com$": "1.2.3.4"
 
-# Optional: in-memory cache for upstream-derived answers (not static hosts hits).
-# Defaults when enabled: positive_ttl 300s, negative_ttl 60s, max_entries 10000 (omit keys to use them).
+# Optional: tune in-memory cache (on by default; omit cache section to use defaults).
+# Set enabled: false to disable. Defaults: positive_ttl 300s, negative_ttl 60s, max_entries 10000.
 # cache:
-#   enabled: true
+#   enabled: false
 
 # Upstream DNS servers
 upstream:

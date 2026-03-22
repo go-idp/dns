@@ -891,8 +891,11 @@ upstream:
 	if err != nil {
 		t.Fatalf("Failed to load config: %v", err)
 	}
-	if !cfg.Cache.Enabled {
+	if !cfg.Cache.EffectiveCacheEnabled() {
 		t.Fatal("expected cache enabled")
+	}
+	if cfg.Cache.Enabled == nil || !*cfg.Cache.Enabled {
+		t.Fatal("expected explicit enabled: true in YAML")
 	}
 	if cfg.Cache.PositiveTTL != "5m" {
 		t.Fatalf("positive_ttl: %q", cfg.Cache.PositiveTTL)
@@ -932,5 +935,63 @@ upstream:
 	}
 	if cfg.Cache.MaxEntries != DNSCacheMaxEntriesDefault {
 		t.Fatalf("max_entries got %d want %d", cfg.Cache.MaxEntries, DNSCacheMaxEntriesDefault)
+	}
+}
+
+func TestLoadConfig_CacheDefaultOnWhenOmitted(t *testing.T) {
+	tmpDir := t.TempDir()
+	configFile := filepath.Join(tmpDir, "test.yaml")
+	configContent := `
+server:
+  port: 53
+upstream:
+  servers:
+    - "127.0.0.1:53"
+`
+	if err := os.WriteFile(configFile, []byte(configContent), 0644); err != nil {
+		t.Fatalf("Failed to write config file: %v", err)
+	}
+	cfg, err := LoadConfig(configFile)
+	if err != nil {
+		t.Fatalf("Failed to load config: %v", err)
+	}
+	if !cfg.Cache.EffectiveCacheEnabled() {
+		t.Fatal("expected cache on by default when cache section omitted")
+	}
+	if cfg.Cache.Enabled != nil {
+		t.Fatalf("expected enabled omitted (nil), got %v", cfg.Cache.Enabled)
+	}
+	if cfg.Cache.PositiveTTL != DNSCachePositiveTTLDefault {
+		t.Fatalf("positive_ttl got %q want %q", cfg.Cache.PositiveTTL, DNSCachePositiveTTLDefault)
+	}
+	if cfg.Cache.NegativeTTL != DNSCacheNegativeTTLDefault {
+		t.Fatalf("negative_ttl got %q want %q", cfg.Cache.NegativeTTL, DNSCacheNegativeTTLDefault)
+	}
+	if cfg.Cache.MaxEntries != DNSCacheMaxEntriesDefault {
+		t.Fatalf("max_entries got %d want %d", cfg.Cache.MaxEntries, DNSCacheMaxEntriesDefault)
+	}
+}
+
+func TestLoadConfig_CacheExplicitDisabled(t *testing.T) {
+	tmpDir := t.TempDir()
+	configFile := filepath.Join(tmpDir, "test.yaml")
+	configContent := `
+server:
+  port: 53
+cache:
+  enabled: false
+upstream:
+  servers:
+    - "127.0.0.1:53"
+`
+	if err := os.WriteFile(configFile, []byte(configContent), 0644); err != nil {
+		t.Fatalf("Failed to write config file: %v", err)
+	}
+	cfg, err := LoadConfig(configFile)
+	if err != nil {
+		t.Fatalf("Failed to load config: %v", err)
+	}
+	if cfg.Cache.EffectiveCacheEnabled() {
+		t.Fatal("expected cache disabled")
 	}
 }

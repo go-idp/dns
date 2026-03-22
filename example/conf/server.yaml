@@ -7,10 +7,10 @@ server:
   port: 53               # DNS server port for UDP/TCP (default: 53)
   ttl: 500               # TTL for DNS responses in seconds (default: 500)
 
-# Optional: cache answers that required upstream (not static hosts / /etc/hosts IP hits).
-# With enabled: true, omitted fields get defaults: positive_ttl 300s, negative_ttl 60s, max_entries 10000.
+# Response cache is ON by default for upstream-derived answers (not static hosts / /etc/hosts IP hits).
+# Omit this block to use defaults: positive_ttl 300s, negative_ttl 60s, max_entries 10000.
 # cache:
-#   enabled: true
+#   enabled: false
 #   # positive_ttl: "300s"
 #   # negative_ttl: "60s"
 #   # max_entries: 10000

@@ -141,17 +141,17 @@ Caches final A/AAAA answers that **required upstream** (including config/system 
 
 | Flag | Default | Description |
 |------|---------|-------------|
-| `--cache` | off | Enable cache (`DNS_CACHE=true`) |
-| `--no-cache` | — | Force disable even if `cache.enabled` in YAML |
+| `--disable-cache` | off | Disable response cache (`DNS_DISABLE_CACHE=true`) |
 | `--cache-ttl` | `300s` | TTL when the answer has at least one IP (`DNS_CACHE_POSITIVE_TTL`) |
 | `--cache-negative-ttl` | `60s` | TTL for empty / NXDOMAIN-style answers (`DNS_CACHE_NEGATIVE_TTL`) |
 | `--cache-max-entries` | `10000` | Max entries (`DNS_CACHE_MAX_ENTRIES`) |
 
-With a config file, YAML `cache.*` overrides these defaults **unless** you set the corresponding flag explicitly on the CLI.
+With a config file, YAML `cache.*` overrides these defaults **unless** you set the corresponding flag explicitly on the CLI. `--disable-cache` wins over `cache.enabled: true`.
 
 ```bash
-dns server --port 53 --upstream 8.8.8.8:53 --cache
-dns server --cache --cache-ttl 10m --cache-negative-ttl 120s
+# Cache is on by default; tune TTLs:
+dns server --port 53 --upstream 8.8.8.8:53 --cache-ttl 10m --cache-negative-ttl 120s
+dns server --disable-cache
 ```
 
 See [Configuration](/guide/configuration) for the `cache:` YAML block.
