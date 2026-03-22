@@ -25,25 +25,30 @@ go build -o bin/dns ./cmd/dns
 
 ## CLI Usage
 
-### DNS Client Query
+### DNS Client (`lookup` / `stress`)
+
 ```bash
 # Query A record
-dns client --domain google.com --type A
+dns client lookup google.com --type A
 
 # Query AAAA record (IPv6)
-dns client --domain google.com --type AAAA
+dns client lookup google.com --type AAAA
 
 # Use DoT server
-dns client --domain example.com --server tls://1.1.1.1
+dns client lookup example.com --server tls://1.1.1.1
 
 # Use DoH server
-dns client --domain example.com --server https://cloudflare-dns.com/dns-query
+dns client lookup example.com --server https://cloudflare-dns.com/dns-query
 
 # Use DoQ server
-dns client --domain example.com --server quic://dns.adguard.com
+dns client lookup example.com --server quic://dns.adguard.com
 
 # Use custom timeout
-dns client --domain example.com --timeout 10s
+dns client lookup example.com --timeout 10s
+
+# Plain DNS load test (UDP/TCP only; use host or host:port, not tls:// / https://)
+dns client stress --domain example.com --server 127.0.0.1:5353 --workers 200 --requests 5000
+dns client stress --domain example.com --server 8.8.8.8 --net tcp --workers 50 -n 500
 ```
 
 ### DNS Server
@@ -169,7 +174,7 @@ After installation, you can start using the DNS CLI:
 
 ```bash
 # Query a domain
-dns client --domain google.com
+dns client lookup google.com
 
 # Start a DNS server
 dns server --port 53
@@ -180,6 +185,8 @@ See the [documentation](https://go-idp.github.io/dns/) for more examples and det
 ## Features
 
 ### Client
+* [x] `lookup`: resolve A/AAAA via plain DNS, DoT, DoH, DoQ, DNSCrypt
+* [x] `stress`: concurrent plain DNS (UDP/TCP) load test against one server
 * [x] Plain DNS
 	* [x] Plain DNS in UDP
 	* [x] Plain DNS in TCP

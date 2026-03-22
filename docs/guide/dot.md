@@ -87,7 +87,7 @@ dot:
 ### Query Using DoT
 
 ```bash
-dns client --domain example.com --server tls://your-dot-server:853
+dns client lookup example.com --server tls://your-dot-server:853
 ```
 
 ### Popular DoT Servers
@@ -102,7 +102,7 @@ dns client --domain example.com --server tls://your-dot-server:853
 
 ```bash
 # Query your DoT server
-dns client --domain example.com --server tls://localhost:853
+dns client lookup example.com --server tls://localhost:853
 ```
 
 ### Verify Certificate

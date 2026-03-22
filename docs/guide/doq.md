@@ -89,7 +89,7 @@ doq:
 ### Query Using DoQ
 
 ```bash
-dns client --domain example.com --server quic://your-doq-server:853
+dns client lookup example.com --server quic://your-doq-server:853
 ```
 
 ### Popular DoQ Servers
@@ -103,7 +103,7 @@ dns client --domain example.com --server quic://your-doq-server:853
 
 ```bash
 # Query your DoQ server
-dns client --domain example.com --server quic://localhost:853
+dns client lookup example.com --server quic://localhost:853
 ```
 
 ### Verify Certificate

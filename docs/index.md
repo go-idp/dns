@@ -49,13 +49,13 @@ go install github.com/go-idp/dns/cmd/dns@latest
 
 ```bash
 # Query A record
-dns client --domain google.com --type A
+dns client lookup google.com --type A
 
 # Query AAAA record (IPv6)
-dns client --domain google.com --type AAAA
+dns client lookup google.com --type AAAA
 
 # Use DoT server
-dns client --domain example.com --server tls://1.1.1.1
+dns client lookup example.com --server tls://1.1.1.1
 ```
 
 ### DNS Server

@@ -64,7 +64,7 @@ doh:
 
 ```bash
 # Query using DoH
-dns client --domain example.com --server https://localhost:443/dns-query
+dns client lookup example.com --server https://localhost:443/dns-query
 ```
 
 ## DNS-over-QUIC (DoQ) Server
@@ -125,7 +125,7 @@ doq:
 
 ```bash
 # Query using DoQ
-dns client --domain example.com --server quic://localhost:853
+dns client lookup example.com --server quic://localhost:853
 ```
 
 ## Running Multiple Protocols

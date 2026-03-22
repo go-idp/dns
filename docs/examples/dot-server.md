@@ -60,7 +60,7 @@ dot:
 
 ```bash
 # Query using DoT
-dns client --domain example.com --server tls://localhost:853
+dns client lookup example.com --server tls://localhost:853
 ```
 
 ## Next Steps

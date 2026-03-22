@@ -10,27 +10,27 @@ DoH provides DNS queries over HTTPS, offering privacy and security while working
 
 ```bash
 # Query using Cloudflare DoH
-dns client --domain google.com --server https://cloudflare-dns.com/dns-query
+dns client lookup google.com --server https://cloudflare-dns.com/dns-query
 
 # Query using AdGuard DoH
-dns client --domain example.com --server https://dns.adguard.com/dns-query
+dns client lookup example.com --server https://dns.adguard.com/dns-query
 
 # Query using Google DoH
-dns client --domain example.com --server https://dns.google/dns-query
+dns client lookup example.com --server https://dns.google/dns-query
 ```
 
 ### DoH with IPv6 Query
 
 ```bash
 # Query AAAA records using DoH
-dns client --domain google.com --type AAAA --server https://cloudflare-dns.com/dns-query
+dns client lookup google.com --type AAAA --server https://cloudflare-dns.com/dns-query
 ```
 
 ### DoH with Custom Timeout
 
 ```bash
 # Use longer timeout for slow networks
-dns client --domain example.com \
+dns client lookup example.com \
   --server https://dns.adguard.com/dns-query \
   --timeout 15s
 ```
@@ -39,7 +39,7 @@ dns client --domain example.com \
 
 ```bash
 # Get only IP addresses for scripting
-dns client --domain example.com \
+dns client lookup example.com \
   --server https://cloudflare-dns.com/dns-query \
   --plain
 ```
@@ -52,21 +52,21 @@ DoQ provides DNS queries over QUIC protocol, offering the lowest latency with en
 
 ```bash
 # Query using AdGuard DoQ
-dns client --domain google.com --server quic://dns.adguard.com
+dns client lookup google.com --server quic://dns.adguard.com
 ```
 
 ### DoQ with IPv6 Query
 
 ```bash
 # Query AAAA records using DoQ
-dns client --domain google.com --type AAAA --server quic://dns.adguard.com
+dns client lookup google.com --type AAAA --server quic://dns.adguard.com
 ```
 
 ### DoQ with Custom Timeout
 
 ```bash
 # Use custom timeout
-dns client --domain example.com \
+dns client lookup example.com \
   --server quic://dns.adguard.com \
   --timeout 10s
 ```
@@ -77,7 +77,7 @@ You can specify multiple servers with different protocols. The client will try t
 
 ```bash
 # Try multiple protocols for redundancy
-dns client --domain example.com \
+dns client lookup example.com \
   --server 8.8.8.8 \
   --server tls://1.1.1.1 \
   --server https://cloudflare-dns.com/dns-query \
@@ -91,11 +91,11 @@ You can set default DoH or DoQ servers using environment variables:
 ```bash
 # Set DoH as default
 export DNS_SERVER=https://cloudflare-dns.com/dns-query
-dns client --domain example.com
+dns client lookup example.com
 
 # Set DoQ as default
 export DNS_SERVER=quic://dns.adguard.com
-dns client --domain example.com
+dns client lookup example.com
 ```
 
 ## Script Examples
@@ -105,7 +105,7 @@ dns client --domain example.com
 ```bash
 #!/bin/bash
 # Get IP address using DoH
-IP=$(dns client --domain example.com \
+IP=$(dns client lookup example.com \
   --server https://cloudflare-dns.com/dns-query \
   --plain | head -n 1)
 
@@ -117,7 +117,7 @@ echo "IP address: $IP"
 ```bash
 #!/bin/bash
 # Get IP address using DoQ
-IP=$(dns client --domain example.com \
+IP=$(dns client lookup example.com \
   --server quic://dns.adguard.com \
   --plain | head -n 1)
 

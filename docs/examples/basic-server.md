@@ -41,7 +41,7 @@ dns server --port 53 --upstream 8.8.8.8:53 --upstream 1.1.1.1:53
 dig @127.0.0.1 example.com
 
 # Or using DNS CLI
-dns client --domain example.com --server 127.0.0.1:53
+dns client lookup example.com --server 127.0.0.1:53
 ```
 
 ## Next Steps

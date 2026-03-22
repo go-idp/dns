@@ -10,10 +10,10 @@ The standard DNS protocol over UDP or TCP.
 
 ```bash
 # Default port 53
-dns client --domain example.com --server 8.8.8.8
+dns client lookup example.com --server 8.8.8.8
 
 # Custom port
-dns client --domain example.com --server 8.8.8.8:5353
+dns client lookup example.com --server 8.8.8.8:5353
 ```
 
 ## DNS-over-TLS (DoT)
@@ -24,10 +24,10 @@ DNS queries encrypted using TLS. Default port: 853.
 
 ```bash
 # Cloudflare DoT
-dns client --domain example.com --server tls://1.1.1.1
+dns client lookup example.com --server tls://1.1.1.1
 
 # Custom port
-dns client --domain example.com --server tls://1.1.1.1:853
+dns client lookup example.com --server tls://1.1.1.1:853
 ```
 
 ### Popular DoT Servers
@@ -44,10 +44,10 @@ DNS queries over HTTPS. Provides privacy and security.
 
 ```bash
 # AdGuard DoH
-dns client --domain example.com --server https://dns.adguard.com/dns-query
+dns client lookup example.com --server https://dns.adguard.com/dns-query
 
 # Cloudflare DoH
-dns client --domain example.com --server https://cloudflare-dns.com/dns-query
+dns client lookup example.com --server https://cloudflare-dns.com/dns-query
 ```
 
 ### Popular DoH Servers
@@ -64,10 +64,10 @@ DNS queries over QUIC protocol. Provides low latency and security. DoQ uses the 
 
 ```bash
 # AdGuard DoQ
-dns client --domain example.com --server quic://dns.adguard.com
+dns client lookup example.com --server quic://dns.adguard.com
 
 # DoQ with custom port
-dns client --domain example.com --server quic://dns.adguard.com:853
+dns client lookup example.com --server quic://dns.adguard.com:853
 ```
 
 ### Popular DoQ Servers
@@ -82,7 +82,7 @@ DNS encryption protocol using DNSCrypt.
 ### Usage
 
 ```bash
-dns client --domain example.com --server sdns://AQcAAAAAAAAAAAAQ1syXTkwLjE3OC4xNzIuMTc4XQ
+dns client lookup example.com --server sdns://AQcAAAAAAAAAAAAQ1syXTkwLjE3OC4xNzIuMTc4XQ
 ```
 
 ## Protocol Comparison

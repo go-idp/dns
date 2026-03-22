@@ -9,7 +9,7 @@ This guide will help you get started with DNS CLI in just a few minutes.
 Query a domain's A record:
 
 ```bash
-dns client --domain google.com --type A
+dns client lookup google.com --type A
 ```
 
 ### Query IPv6
@@ -17,7 +17,7 @@ dns client --domain google.com --type A
 Query a domain's AAAA record (IPv6):
 
 ```bash
-dns client --domain google.com --type AAAA
+dns client lookup google.com --type AAAA
 ```
 
 ### Use DoT Server
@@ -25,7 +25,7 @@ dns client --domain google.com --type AAAA
 Query using DNS-over-TLS:
 
 ```bash
-dns client --domain example.com --server tls://1.1.1.1
+dns client lookup example.com --server tls://1.1.1.1
 ```
 
 ### Plain Output
@@ -33,7 +33,7 @@ dns client --domain example.com --server tls://1.1.1.1
 Get only IP addresses (useful for scripting):
 
 ```bash
-dns client --domain google.com --plain
+dns client lookup google.com --plain
 ```
 
 ## DNS Server

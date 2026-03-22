@@ -12,8 +12,10 @@ This is a DNS client and server CLI tool written in Go. It provides both a comma
 .
 ├── cmd/dns/              # Main CLI application
 │   ├── commands/         # CLI command implementations
-│   │   ├── client.go     # DNS client command
-│   │   └── server.go     # DNS server command
+│   │   ├── client.go          # DNS client parent command + shared helpers
+│   │   ├── client_lookup.go   # client lookup subcommand
+│   │   ├── client_stress.go   # client stress subcommand (plain DNS load test)
+│   │   └── server.go          # DNS server command
 │   ├── config/           # Configuration management
 │   │   ├── config.go     # Config struct and parsing
 │   │   └── config_test.go # Configuration tests
@@ -29,11 +31,9 @@ This is a DNS client and server CLI tool written in Go. It provides both a comma
 
 ## Key Components
 
-### DNS Client (`cmd/dns/commands/client.go`)
-- Supports A and AAAA record queries
-- Supports multiple DNS server types (plain DNS, DoT, DoH, DoQ, DNSCrypt)
-- Configurable timeout
-- Plain output mode for scripting
+### DNS Client (`cmd/dns/commands/client*.go`)
+- **`lookup`**: A and AAAA queries; multiple DNS server types (plain DNS, DoT, DoH, DoQ, DNSCrypt); configurable timeout; `--plain` for scripting
+- **`stress`**: concurrent plain DNS (UDP/TCP) load test via `github.com/miekg/dns` against one `host:port`
 
 ### DNS Server (`cmd/dns/commands/server.go`)
 - Plain DNS server (UDP/TCP)
@@ -87,6 +87,15 @@ This project follows the [Google Commit Message Convention](https://google.githu
 - Add comments for exported functions and types
 - Keep functions focused and small
 - Handle errors explicitly
+
+### CLI flags (`github.com/go-zoox/cli` / `urfave/cli/v2`)
+When defining `cli.StringFlag`, `cli.IntFlag`, etc.:
+- **`Name`** — canonical long flag (e.g. `requests`, `workers`, `domain`). This is what `ctx.Int("requests")` / `ctx.String("domain")` use.
+- **`Aliases`** — short or alternate names (e.g. `n`, `w`, `d`). Users type `-n` / `-w` / `-d`.
+
+Do **not** put the short letter in `Name` and the long word in `Aliases` (that inverts the library’s convention and breaks help text). Example: total query count should be `Name: "requests", Aliases: []string{"n"}`, not the reverse.
+
+For **`client lookup`**, the desired UX is `lookup <domain> --flags…`. The stdlib flag parser stops at the first non-flag token, so flags after the domain would not apply. The lookup subcommand sets **`SkipFlagParsing: true`** and parses `ctx.Args()` manually (`parseLookupArgv`) so `lookup baidu.com --server 223.5.5.5` works.
 
 ### Testing
 - Write tests for all configuration parsing logic

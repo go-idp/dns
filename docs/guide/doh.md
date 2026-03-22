@@ -88,7 +88,7 @@ doh:
 ### Query Using DoH
 
 ```bash
-dns client --domain example.com --server https://your-doh-server:443/dns-query
+dns client lookup example.com --server https://your-doh-server:443/dns-query
 ```
 
 ### Popular DoH Servers
@@ -104,7 +104,7 @@ dns client --domain example.com --server https://your-doh-server:443/dns-query
 
 ```bash
 # Query your DoH server
-dns client --domain example.com --server https://localhost:443/dns-query
+dns client lookup example.com --server https://localhost:443/dns-query
 ```
 
 ### Verify Certificate
