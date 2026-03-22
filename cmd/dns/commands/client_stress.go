@@ -38,9 +38,9 @@ func newClientStressCommand() *cli.Command {
 				Value:   "A",
 			},
 			&cli.StringFlag{
-				Name:    "net",
-				Usage:   "Transport: udp or tcp",
-				Value:   "udp",
+				Name:  "net",
+				Usage: "Transport: udp or tcp",
+				Value: "udp",
 			},
 			&cli.IntFlag{
 				Name:    "workers",
@@ -55,9 +55,9 @@ func newClientStressCommand() *cli.Command {
 				Value:   1000,
 			},
 			&cli.StringFlag{
-				Name:    "timeout",
-				Usage:   "Per-query timeout (e.g. 2s)",
-				Value:   "2s",
+				Name:  "timeout",
+				Usage: "Per-query timeout (e.g. 2s)",
+				Value: "2s",
 			},
 			&cli.BoolFlag{
 				Name:  "accept-nxdomain",

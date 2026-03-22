@@ -18,11 +18,11 @@ import (
 var errLookupHelp = errors.New("lookup help")
 
 type lookupParsed struct {
-	domain   string
-	servers  []string
-	qtype    string
-	timeout  string
-	plain    bool
+	domain  string
+	servers []string
+	qtype   string
+	timeout string
+	plain   bool
 }
 
 // parseLookupArgv parses interspersed flags and positional domain (urfave/cli stops

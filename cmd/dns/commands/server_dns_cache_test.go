@@ -44,7 +44,7 @@ func TestDNSAnswerCacheExpiry(t *testing.T) {
 	now := time.Now()
 	key := "y#4"
 	c.set(now, key, []string{"9.9.9.9"}, false, 50*time.Millisecond)
-	if _, hit := c.get(now.Add(100 * time.Millisecond), key); hit {
+	if _, hit := c.get(now.Add(100*time.Millisecond), key); hit {
 		t.Fatal("expected miss after expiry")
 	}
 }
