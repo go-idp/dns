@@ -36,6 +36,7 @@ This is a DNS client and server CLI tool written in Go. It provides both a comma
 - **`stress`**: concurrent plain DNS (UDP/TCP) load test via `github.com/miekg/dns` against one `host:port`
 
 ### DNS Server (`cmd/dns/commands/server.go`)
+- Query hot path: log successful resolutions with `logger.Debugf` only; system `/etc/hosts` snapshot uses `atomic.Value` for lock-free reads.
 - Plain DNS server (UDP/TCP)
 - DNS-over-TLS (DoT) support
 - Custom host mappings with highest priority

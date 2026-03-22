@@ -115,10 +115,19 @@ func newClientStressCommand() *cli.Command {
 			start := time.Now()
 			var wg sync.WaitGroup
 
+			// ExchangeContext dials and closes a socket on every query, which limits QPS and
+			// can exhaust ephemeral ports. One persistent Conn per worker matches typical resolvers.
 			for w := 0; w < workers; w++ {
 				wg.Add(1)
 				go func() {
 					defer wg.Done()
+					conn, derr := dnsClient.Dial(addr)
+					if derr != nil {
+						// Do not consume shared next counter; other workers handle all requests.
+						return
+					}
+					defer conn.Close()
+
 					for {
 						i := next.Add(1)
 						if int(i) > n {
@@ -129,7 +138,7 @@ func newClientStressCommand() *cli.Command {
 						m.RecursionDesired = true
 
 						rctx, cancel := context.WithTimeout(context.Background(), timeout)
-						r, _, err := dnsClient.ExchangeContext(rctx, m, addr)
+						r, _, err := dnsClient.ExchangeWithConnContext(rctx, m, conn)
 						cancel()
 						if err != nil || r == nil {
 							fail.Add(1)

@@ -9,7 +9,7 @@ import (
 	"path/filepath"
 	"regexp"
 	"strings"
-	"sync"
+	"sync/atomic"
 	"syscall"
 	"time"
 
@@ -120,7 +120,7 @@ func parseSystemHostsFile(filePath string) ([]SystemHostsEntry, error) {
 		uniqueEntries = append(uniqueEntries, *entry)
 	}
 
-	logger.Debug("Parsed %d unique entries from hosts file %s (total mappings: %d)", len(uniqueEntries), filePath, len(hostsParser.Mapping))
+	logger.Debugf("Parsed %d unique entries from hosts file %s (total mappings: %d)", len(uniqueEntries), filePath, len(hostsParser.Mapping))
 	return uniqueEntries, nil
 }
 
@@ -129,25 +129,25 @@ func lookupSystemHosts(entries []SystemHostsEntry, domain string, queryType int)
 	domain = strings.ToLower(strings.TrimSpace(domain))
 	domainNoDot := strings.TrimSuffix(domain, ".")
 
-	logger.Debug("Looking up domain: %s (no dot: %s), query type: %d, entries count: %d", domain, domainNoDot, queryType, len(entries))
+	logger.Debugf("Looking up domain: %s (no dot: %s), query type: %d, entries count: %d", domain, domainNoDot, queryType, len(entries))
 
 	// First try exact matches
 	for _, entry := range entries {
 		if !entry.IsWildcard && !entry.IsRegex {
-			logger.Debug("Checking exact match: entry.Domain=%s, domain=%s, domainNoDot=%s", entry.Domain, domain, domainNoDot)
+			logger.Debugf("Checking exact match: entry.Domain=%s, domain=%s, domainNoDot=%s", entry.Domain, domain, domainNoDot)
 			if entry.Domain == domain || entry.Domain == domainNoDot {
 				if entry.IP == "" {
 					continue
 				}
 				// Check if IP matches query type
 				if queryType == 4 && !config.IsIPv6(entry.IP) {
-					logger.Debug("Found exact match: %s -> %s", entry.Domain, entry.IP)
+					logger.Debugf("Found exact match: %s -> %s", entry.Domain, entry.IP)
 					return entry.IP, nil
 				} else if queryType == 6 && config.IsIPv6(entry.IP) {
-					logger.Debug("Found exact match: %s -> %s", entry.Domain, entry.IP)
+					logger.Debugf("Found exact match: %s -> %s", entry.Domain, entry.IP)
 					return entry.IP, nil
 				} else {
-					logger.Debug("IP type mismatch: queryType=%d, isIPv6=%v, IP=%s", queryType, config.IsIPv6(entry.IP), entry.IP)
+					logger.Debugf("IP type mismatch: queryType=%d, isIPv6=%v, IP=%s", queryType, config.IsIPv6(entry.IP), entry.IP)
 				}
 			}
 		}
@@ -160,12 +160,12 @@ func lookupSystemHosts(entries []SystemHostsEntry, domain string, queryType int)
 		if entry.IsRegex && entry.Regex != nil {
 			matched = entry.Regex.MatchString(domain) || entry.Regex.MatchString(domainNoDot)
 			if matched {
-				logger.Debug("Regex match: pattern=%s, domain=%s", entry.Domain, domain)
+				logger.Debugf("Regex match: pattern=%s, domain=%s", entry.Domain, domain)
 			}
 		} else if entry.IsWildcard {
 			matched = config.MatchWildcard(domain, entry.Domain) || config.MatchWildcard(domainNoDot, entry.Domain)
 			if matched {
-				logger.Debug("Wildcard match: pattern=%s, domain=%s", entry.Domain, domain)
+				logger.Debugf("Wildcard match: pattern=%s, domain=%s", entry.Domain, domain)
 			}
 		}
 
@@ -182,7 +182,7 @@ func lookupSystemHosts(entries []SystemHostsEntry, domain string, queryType int)
 		}
 	}
 
-	logger.Debug("No match found for domain: %s", domain)
+	logger.Debugf("No match found for domain: %s", domain)
 	return "", fmt.Errorf("not found")
 }
 
@@ -274,14 +274,14 @@ func parseResolvConf(resolvConfPath string, serverHost string) ([]string, error)
 			// Skip localhost addresses
 			addrLower := strings.ToLower(addr)
 			if localIPs[addrLower] || localIPs[addr] {
-				logger.Debug("Skipping local nameserver: %s", addr)
+				logger.Debugf("Skipping local nameserver: %s", addr)
 				continue
 			}
 
 			// Check if it's a loopback IP
 			if ip := net.ParseIP(addr); ip != nil {
 				if ip.IsLoopback() || ip.IsUnspecified() {
-					logger.Debug("Skipping loopback nameserver: %s", addr)
+					logger.Debugf("Skipping loopback nameserver: %s", addr)
 					continue
 				}
 			}
@@ -302,8 +302,8 @@ func parseResolvConf(resolvConfPath string, serverHost string) ([]string, error)
 	return nameservers, nil
 }
 
-// reloadSystemHostsFile reloads the system hosts file and updates entries
-func reloadSystemHostsFile(filePath string, entries *[]SystemHostsEntry, mutex *sync.RWMutex) {
+// reloadSystemHostsFile reloads the system hosts file and updates entries (lock-free read path via atomic.Value).
+func reloadSystemHostsFile(filePath string, hostsAtomic *atomic.Value) {
 	// Small delay to ensure file write is complete
 	time.Sleep(200 * time.Millisecond)
 
@@ -314,18 +314,21 @@ func reloadSystemHostsFile(filePath string, entries *[]SystemHostsEntry, mutex *
 		return
 	}
 
-	// Update entries with lock
-	mutex.Lock()
-	oldCount := len(*entries)
-	*entries = newEntries
+	oldAny := hostsAtomic.Load()
+	oldCount := 0
+	if oldAny != nil {
+		if old, ok := oldAny.([]SystemHostsEntry); ok {
+			oldCount = len(old)
+		}
+	}
 	newCount := len(newEntries)
-	mutex.Unlock()
+	hostsAtomic.Store(newEntries)
 
 	logger.Info("Successfully reloaded system hosts file: %s (entries: %d -> %d)", filePath, oldCount, newCount)
 }
 
 // watchSystemHostsFile watches for changes to the system hosts file and reloads it automatically
-func watchSystemHostsFile(filePath string, entries *[]SystemHostsEntry, mutex *sync.RWMutex) {
+func watchSystemHostsFile(filePath string, hostsAtomic *atomic.Value) {
 	watcher, err := fsnotify.NewWatcher()
 	if err != nil {
 		logger.Warn("Failed to create file watcher for hosts file: %v", err)
@@ -340,7 +343,7 @@ func watchSystemHostsFile(filePath string, entries *[]SystemHostsEntry, mutex *s
 
 	// Try to watch the file directly first
 	if err := watcher.Add(filePath); err != nil {
-		logger.Debug("Cannot watch file directly, watching directory instead: %v", err)
+		logger.Debugf("Cannot watch file directly, watching directory instead: %v", err)
 		// If direct file watch fails, watch the directory
 		if err := watcher.Add(dir); err != nil {
 			logger.Warn("Failed to watch directory %s for hosts file changes: %v", dir, err)
@@ -359,7 +362,7 @@ func watchSystemHostsFile(filePath string, entries *[]SystemHostsEntry, mutex *s
 			}
 
 			// Log all events for debugging
-			logger.Debug("File watcher event: %s, op: %v", event.Name, event.Op)
+			logger.Debugf("File watcher event: %s, op: %v", event.Name, event.Op)
 
 			// Check if the event is for our hosts file
 			// Compare both full path and filename (in case we're watching directory)
@@ -372,28 +375,24 @@ func watchSystemHostsFile(filePath string, entries *[]SystemHostsEntry, mutex *s
 				// (when editors use atomic writes: create temp file, delete old, rename temp)
 				if event.Op&fsnotify.Write == fsnotify.Write {
 					logger.Info("Detected change in system hosts file: %s (write event)", filePath)
-					reloadSystemHostsFile(filePath, entries, mutex)
+					reloadSystemHostsFile(filePath, hostsAtomic)
 				} else if event.Op&fsnotify.Create == fsnotify.Create {
 					logger.Info("Detected change in system hosts file: %s (create event)", filePath)
-					reloadSystemHostsFile(filePath, entries, mutex)
+					reloadSystemHostsFile(filePath, hostsAtomic)
 				} else if event.Op&fsnotify.Rename == fsnotify.Rename {
 					// Rename event often occurs during file updates (atomic write pattern used by vim and other editors)
 					// Check if file still exists (file was likely renamed back to original name)
 					if _, err := os.Stat(filePath); err == nil {
 						logger.Info("Detected change in system hosts file: %s (file updated, reloading)", filePath)
-						reloadSystemHostsFile(filePath, entries, mutex)
+						reloadSystemHostsFile(filePath, hostsAtomic)
 					} else {
 						logger.Warn("System hosts file %s was renamed and no longer exists", filePath)
-						mutex.Lock()
-						*entries = []SystemHostsEntry{}
-						mutex.Unlock()
+						hostsAtomic.Store([]SystemHostsEntry{})
 						logger.Info("Cleared system hosts entries due to file rename/removal")
 					}
 				} else if event.Op&fsnotify.Remove == fsnotify.Remove {
 					logger.Warn("System hosts file %s was removed", filePath)
-					mutex.Lock()
-					*entries = []SystemHostsEntry{}
-					mutex.Unlock()
+					hostsAtomic.Store([]SystemHostsEntry{})
 					logger.Info("Cleared system hosts entries due to file removal")
 				}
 			}
@@ -651,28 +650,25 @@ func NewServerCommand() *cli.Command {
 
 			server := dns.NewServer(serverOptions)
 
-			// Initialize system hosts file parser (enabled by default unless disabled)
-			var systemHostsEntries []SystemHostsEntry
-			var systemHostsMutex sync.RWMutex
+			// System hosts snapshot for lock-free reads on the query hot path (atomic.Value).
+			var systemHostsAtomic atomic.Value
 			if !disableSystemHosts {
-				// Load initial hosts file
 				entries, err := parseSystemHostsFile(systemHostsFile)
 				if err != nil {
 					logger.Warn("Failed to load system hosts file %s: %v", systemHostsFile, err)
-					systemHostsEntries = []SystemHostsEntry{}
+					systemHostsAtomic.Store([]SystemHostsEntry{})
 				} else {
-					systemHostsEntries = entries
+					systemHostsAtomic.Store(entries)
 					logger.Info("Loaded system hosts file: %s (with wildcard/regex support, %d entries)", systemHostsFile, len(entries))
-					// Debug: log first few entries
 					for i, entry := range entries {
 						if i < 5 {
-							logger.Debug("System hosts entry %d: %s -> %s (wildcard: %v, regex: %v)", i, entry.Domain, entry.IP, entry.IsWildcard, entry.IsRegex)
+							logger.Debugf("System hosts entry %d: %s -> %s (wildcard: %v, regex: %v)", i, entry.Domain, entry.IP, entry.IsWildcard, entry.IsRegex)
 						}
 					}
 				}
-
-				// Watch for hosts file changes and reload automatically
-				go watchSystemHostsFile(systemHostsFile, &systemHostsEntries, &systemHostsMutex)
+				go watchSystemHostsFile(systemHostsFile, &systemHostsAtomic)
+			} else {
+				systemHostsAtomic.Store([]SystemHostsEntry{})
 			}
 
 			// Set up handler with three-tier priority:
@@ -685,13 +681,13 @@ func NewServerCommand() *cli.Command {
 				if typ == 6 {
 					queryType = "AAAA"
 				}
-				logger.Debug("DNS query received: %s (type: %s, code: %d)", hostname, queryType, typ)
+				logger.Debugf("DNS query received: %s (type: %s, code: %d)", hostname, queryType, typ)
 
 				// Priority 1: Check configuration hosts mapping
 				if cfg != nil {
 					ips, err := cfg.LookupHost(hostname, typ)
 					if err == nil && len(ips) > 0 {
-						logger.Info("[channel: config.hosts] Resolved %s (%s) from config hosts -> %v", hostname, queryType, ips)
+						logger.Debugf("[channel: config.hosts] Resolved %s (%s) from config hosts -> %v", hostname, queryType, ips)
 						return ips, nil
 					}
 
@@ -699,36 +695,39 @@ func NewServerCommand() *cli.Command {
 					// if hostname maps to a domain alias, resolve that alias via upstream.
 					aliasTarget, aliasErr := cfg.LookupAlias(hostname)
 					if aliasErr == nil && aliasTarget != "" {
-						logger.Debug("Config alias match for %s (%s): %s, querying upstream", hostname, queryType, aliasTarget)
+						logger.Debugf("Config alias match for %s (%s): %s, querying upstream", hostname, queryType, aliasTarget)
 						aliasIPs, upstreamErr := upstreamClient.LookUp(aliasTarget, &client.LookUpOptions{
 							Typ: typ,
 						})
 						if upstreamErr == nil && len(aliasIPs) > 0 {
-							logger.Info("[channel: config.alias] Resolved %s (%s) via alias %s -> %v", hostname, queryType, aliasTarget, aliasIPs)
+							logger.Debugf("[channel: config.alias] Resolved %s (%s) via alias %s -> %v", hostname, queryType, aliasTarget, aliasIPs)
 							return aliasIPs, nil
 						}
 						if isUpstreamNotFoundError(upstreamErr) {
-							logger.Debug("Alias target %s has no %s record, returning empty answer", aliasTarget, queryType)
+							logger.Debugf("Alias target %s has no %s record, returning empty answer", aliasTarget, queryType)
 							return []string{}, nil
 						}
 						logger.Warn("Failed to resolve alias target %s for %s (%s): %v", aliasTarget, hostname, queryType, upstreamErr)
 					}
 
-					logger.Debug("No match found in config hosts/alias for %s (%s)", hostname, queryType)
+					logger.Debugf("No match found in config hosts/alias for %s (%s)", hostname, queryType)
 				} else {
-					logger.Debug("Config hosts not available, skipping priority 1")
+					logger.Debugf("Config hosts not available, skipping priority 1")
 				}
 
 				// Priority 2: Check system hosts file (if enabled)
-				systemHostsMutex.RLock()
-				entries := systemHostsEntries
-				systemHostsMutex.RUnlock()
+				var entries []SystemHostsEntry
+				if v := systemHostsAtomic.Load(); v != nil {
+					if s, ok := v.([]SystemHostsEntry); ok {
+						entries = s
+					}
+				}
 
 				if len(entries) > 0 {
-					logger.Debug("Checking system hosts for %s (%s), total entries: %d", hostname, queryType, len(entries))
+					logger.Debugf("Checking system hosts for %s (%s), total entries: %d", hostname, queryType, len(entries))
 					ip, err := lookupSystemHosts(entries, hostname, typ)
 					if err == nil && ip != "" {
-						logger.Info("[channel: system.hosts] Resolved %s (%s) from system hosts -> %v", hostname, queryType, []string{ip})
+						logger.Debugf("[channel: system.hosts] Resolved %s (%s) from system hosts -> %v", hostname, queryType, []string{ip})
 						return []string{ip}, nil
 					}
 
@@ -736,34 +735,34 @@ func NewServerCommand() *cli.Command {
 					// if hostname maps to an alias domain, resolve it via upstream.
 					aliasTarget, aliasErr := lookupSystemHostsAlias(entries, hostname)
 					if aliasErr == nil && aliasTarget != "" {
-						logger.Debug("System hosts alias match for %s (%s): %s, querying upstream", hostname, queryType, aliasTarget)
+						logger.Debugf("System hosts alias match for %s (%s): %s, querying upstream", hostname, queryType, aliasTarget)
 						aliasIPs, upstreamErr := upstreamClient.LookUp(aliasTarget, &client.LookUpOptions{
 							Typ: typ,
 						})
 						if upstreamErr == nil && len(aliasIPs) > 0 {
-							logger.Info("[channel: system.alias] Resolved %s (%s) via alias %s -> %v", hostname, queryType, aliasTarget, aliasIPs)
+							logger.Debugf("[channel: system.alias] Resolved %s (%s) via alias %s -> %v", hostname, queryType, aliasTarget, aliasIPs)
 							return aliasIPs, nil
 						}
 						if isUpstreamNotFoundError(upstreamErr) {
-							logger.Debug("System alias target %s has no %s record, returning empty answer", aliasTarget, queryType)
+							logger.Debugf("System alias target %s has no %s record, returning empty answer", aliasTarget, queryType)
 							return []string{}, nil
 						}
 						logger.Warn("Failed to resolve system alias target %s for %s (%s): %v", aliasTarget, hostname, queryType, upstreamErr)
 					}
 
-					logger.Debug("No match found in system hosts for %s (%s), error: %v", hostname, queryType, err)
+					logger.Debugf("No match found in system hosts for %s (%s), error: %v", hostname, queryType, err)
 				} else {
-					logger.Debug("System hosts not enabled or empty, skipping priority 2")
+					logger.Debugf("System hosts not enabled or empty, skipping priority 2")
 				}
 
 				// Priority 3: Fallback to upstream DNS servers
-				logger.Debug("Querying upstream DNS servers for %s (%s)", hostname, queryType)
+				logger.Debugf("Querying upstream DNS servers for %s (%s)", hostname, queryType)
 				ips, err := upstreamClient.LookUp(hostname, &client.LookUpOptions{
 					Typ: typ,
 				})
 				if err != nil {
 					if isUpstreamNotFoundError(err) {
-						logger.Debug("Upstream returned not found for %s (%s), returning empty answer", hostname, queryType)
+						logger.Debugf("Upstream returned not found for %s (%s), returning empty answer", hostname, queryType)
 						return []string{}, nil
 					}
 					logger.Error("Failed to resolve %s (%s) from upstream: %v", hostname, queryType, err)
@@ -771,9 +770,9 @@ func NewServerCommand() *cli.Command {
 				}
 
 				if len(ips) > 0 {
-					logger.Info("[channel: upstream] Resolved %s (%s) from upstream -> %v", hostname, queryType, ips)
+					logger.Debugf("[channel: upstream] Resolved %s (%s) from upstream -> %v", hostname, queryType, ips)
 				} else {
-					logger.Warn("No results found for %s (%s) from upstream", hostname, queryType)
+					logger.Debugf("No results found for %s (%s) from upstream", hostname, queryType)
 				}
 				return ips, nil
 			})

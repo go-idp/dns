@@ -130,6 +130,8 @@ echo "IP address: $IP"
 
 Use this to benchmark a plain DNS listener (for example your `dns server`). It does **not** support `tls://`, `https://`, or `quic://` — only UDP or TCP to `host:port`.
 
+**Performance notes:** each worker reuses one UDP/TCP connection (avoiding per-query dial/close). If you still see many failures, try a larger `--timeout`, fewer `--workers` (UDP reordering / server limits), or `--net tcp` for reliability. For your own `dns server`, tune upstream timeout and capacity; recursive paths are often the bottleneck.
+
 ```bash
 # 200 workers, 5000 queries over UDP (default)
 dns client stress --domain example.com --server 127.0.0.1:5353 --workers 200 --requests 5000

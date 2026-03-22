@@ -82,6 +82,8 @@ dns server --config /path/to/config.yaml
 dns server --config /path/to/config.yaml --port 5353
 ```
 
+**High QPS:** successful answers are logged at **debug** only; raise the logger to debug when troubleshooting. Tune `upstream.servers` and `upstream.timeout`.
+
 ### Configuration File
 
 The server supports YAML configuration files for easier management. See `example/conf/server.yaml` for a complete example.
