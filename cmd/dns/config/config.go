@@ -19,6 +19,41 @@ type Config struct {
 	Hosts       HostsConfig       `yaml:"hosts"`
 	SystemHosts SystemHostsConfig `yaml:"system_hosts"`
 	Upstream    UpstreamConfig    `yaml:"upstream"`
+	Cache       CacheConfig       `yaml:"cache"`
+}
+
+// CacheConfig enables in-memory caching of answers that required upstream resolution.
+// Static hosts / /etc/hosts hits are not cached (they do not use upstream).
+type CacheConfig struct {
+	Enabled     bool   `yaml:"enabled"`
+	PositiveTTL string `yaml:"positive_ttl"` // TTL for answers with at least one IP
+	NegativeTTL string `yaml:"negative_ttl"` // TTL for empty / NXDOMAIN-style answers
+	MaxEntries  int    `yaml:"max_entries"`  // 0 = use DNSCacheMaxEntriesDefault
+}
+
+// Defaults when cache is enabled (--cache or cache.enabled) and a field is omitted.
+// Rationale: ~5m positive TTL matches many public DNS minima; short negative TTL limits stale NXDOMAIN;
+// 10k entries is a safe default footprint for small/medium resolvers.
+const (
+	DNSCachePositiveTTLDefault = "300s" // 5 minutes
+	DNSCacheNegativeTTLDefault = "60s"
+	DNSCacheMaxEntriesDefault  = 10000
+)
+
+// applyDNSCacheDefaults fills omitted cache fields when cache.enabled is true.
+func applyDNSCacheDefaults(c *CacheConfig) {
+	if !c.Enabled {
+		return
+	}
+	if c.PositiveTTL == "" {
+		c.PositiveTTL = DNSCachePositiveTTLDefault
+	}
+	if c.NegativeTTL == "" {
+		c.NegativeTTL = DNSCacheNegativeTTLDefault
+	}
+	if c.MaxEntries == 0 {
+		c.MaxEntries = DNSCacheMaxEntriesDefault
+	}
 }
 
 // ServerConfig represents basic server settings
@@ -122,6 +157,8 @@ func LoadConfig(filePath string) (*Config, error) {
 	if len(config.Upstream.Servers) == 0 {
 		config.Upstream.Servers = []string{"114.114.114.114:53"}
 	}
+
+	applyDNSCacheDefaults(&config.Cache)
 
 	// Set default system hosts file path if not disabled and not specified
 	if !config.SystemHosts.Disabled && config.SystemHosts.FilePath == "" {

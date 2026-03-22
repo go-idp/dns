@@ -497,6 +497,33 @@ func NewServerCommand() *cli.Command {
 				Value:   "/etc/hosts",
 				EnvVars: []string{"DNS_SYSTEM_HOSTS_FILE"},
 			},
+			&cli.BoolFlag{
+				Name:    "cache",
+				Usage:   "Enable in-memory cache for upstream-derived answers",
+				EnvVars: []string{"DNS_CACHE"},
+			},
+			&cli.BoolFlag{
+				Name:  "no-cache",
+				Usage: "Disable response cache even if enabled in config file",
+			},
+			&cli.StringFlag{
+				Name:    "cache-ttl",
+				Value:   config.DNSCachePositiveTTLDefault,
+				Usage:   "TTL for cached answers that have IPs",
+				EnvVars: []string{"DNS_CACHE_POSITIVE_TTL"},
+			},
+			&cli.StringFlag{
+				Name:    "cache-negative-ttl",
+				Value:   config.DNSCacheNegativeTTLDefault,
+				Usage:   "TTL for cached empty / NXDOMAIN-style answers",
+				EnvVars: []string{"DNS_CACHE_NEGATIVE_TTL"},
+			},
+			&cli.IntFlag{
+				Name:    "cache-max-entries",
+				Value:   config.DNSCacheMaxEntriesDefault,
+				Usage:   "Maximum number of cache entries",
+				EnvVars: []string{"DNS_CACHE_MAX_ENTRIES"},
+			},
 		},
 		Action: func(ctx *cli.Context) error {
 			var cfg *config.Config
@@ -588,6 +615,48 @@ func NewServerCommand() *cli.Command {
 				}
 			}
 
+			cacheEnabled := false
+			if !ctx.Bool("no-cache") {
+				if ctx.Bool("cache") {
+					cacheEnabled = true
+				} else if cfg != nil && cfg.Cache.Enabled {
+					cacheEnabled = true
+				}
+			}
+			cachePosTTL, err := time.ParseDuration(strings.TrimSpace(ctx.String("cache-ttl")))
+			if err != nil {
+				return fmt.Errorf("invalid --cache-ttl: %w", err)
+			}
+			cacheNegTTL, err := time.ParseDuration(strings.TrimSpace(ctx.String("cache-negative-ttl")))
+			if err != nil {
+				return fmt.Errorf("invalid --cache-negative-ttl: %w", err)
+			}
+			cacheMaxEntries := ctx.Int("cache-max-entries")
+			if cacheMaxEntries <= 0 {
+				cacheMaxEntries = config.DNSCacheMaxEntriesDefault
+			}
+			// Config overrides flag defaults unless the flag was set explicitly on the CLI.
+			if cfg != nil && cfg.Cache.Enabled {
+				if !ctx.IsSet("cache-ttl") {
+					if d, err := time.ParseDuration(cfg.Cache.PositiveTTL); err == nil {
+						cachePosTTL = d
+					}
+				}
+				if !ctx.IsSet("cache-negative-ttl") {
+					if d, err := time.ParseDuration(cfg.Cache.NegativeTTL); err == nil {
+						cacheNegTTL = d
+					}
+				}
+				if !ctx.IsSet("cache-max-entries") && cfg.Cache.MaxEntries > 0 {
+					cacheMaxEntries = cfg.Cache.MaxEntries
+				}
+			}
+			var ansCache *dnsAnswerCache
+			if cacheEnabled {
+				ansCache = newDNSAnswerCache(cacheMaxEntries)
+				logger.Info("DNS response cache enabled (positive_ttl=%v negative_ttl=%v max_entries=%d)", cachePosTTL, cacheNegTTL, cacheMaxEntries)
+			}
+
 			// Default upstream: try to read from /etc/resolv.conf if still empty
 			if len(upstreams) == 0 {
 				resolvConfServers, err := parseResolvConf("/etc/resolv.conf", host)
@@ -671,28 +740,59 @@ func NewServerCommand() *cli.Command {
 				systemHostsAtomic.Store([]SystemHostsEntry{})
 			}
 
-			// Set up handler with three-tier priority:
-			// 1. Configuration hosts (highest priority)
-			// 2. System /etc/hosts file (if enabled)
-			// 3. Upstream DNS servers
+			// Handler order:
+			// 1. Config hosts (static IP)
+			// 2. System hosts (static IP)
+			// 3. Response cache (upstream-derived answers only)
+			// 4. Config alias -> upstream
+			// 5. System hosts alias -> upstream
+			// 6. Upstream
 			server.Handle(func(hostname string, typ int) ([]string, error) {
-				// Map query type to string for better logging
 				queryType := "A"
 				if typ == 6 {
 					queryType = "AAAA"
 				}
 				logger.Debugf("DNS query received: %s (type: %s, code: %d)", hostname, queryType, typ)
 
-				// Priority 1: Check configuration hosts mapping
 				if cfg != nil {
 					ips, err := cfg.LookupHost(hostname, typ)
 					if err == nil && len(ips) > 0 {
 						logger.Debugf("[channel: config.hosts] Resolved %s (%s) from config hosts -> %v", hostname, queryType, ips)
 						return ips, nil
 					}
+				} else {
+					logger.Debugf("Config hosts not available, skipping config static hosts")
+				}
 
-					// Support alias target in hosts config:
-					// if hostname maps to a domain alias, resolve that alias via upstream.
+				var entries []SystemHostsEntry
+				if v := systemHostsAtomic.Load(); v != nil {
+					if s, ok := v.([]SystemHostsEntry); ok {
+						entries = s
+					}
+				}
+				var sysHostsLookupErr error
+				if len(entries) > 0 {
+					logger.Debugf("Checking system hosts for %s (%s), total entries: %d", hostname, queryType, len(entries))
+					ip, err := lookupSystemHosts(entries, hostname, typ)
+					sysHostsLookupErr = err
+					if err == nil && ip != "" {
+						logger.Debugf("[channel: system.hosts] Resolved %s (%s) from system hosts -> %v", hostname, queryType, []string{ip})
+						return []string{ip}, nil
+					}
+				} else {
+					logger.Debugf("System hosts not enabled or empty, skipping system static hosts")
+				}
+
+				ck := dnsCacheKey(hostname, typ)
+				now := time.Now()
+				if ansCache != nil {
+					if ips, hit := ansCache.get(now, ck); hit {
+						logger.Debugf("[cache] hit for %s (%s)", hostname, queryType)
+						return ips, nil
+					}
+				}
+
+				if cfg != nil {
 					aliasTarget, aliasErr := cfg.LookupAlias(hostname)
 					if aliasErr == nil && aliasTarget != "" {
 						logger.Debugf("Config alias match for %s (%s): %s, querying upstream", hostname, queryType, aliasTarget)
@@ -701,38 +801,24 @@ func NewServerCommand() *cli.Command {
 						})
 						if upstreamErr == nil && len(aliasIPs) > 0 {
 							logger.Debugf("[channel: config.alias] Resolved %s (%s) via alias %s -> %v", hostname, queryType, aliasTarget, aliasIPs)
+							if ansCache != nil {
+								ansCache.set(time.Now(), ck, aliasIPs, false, cachePosTTL)
+							}
 							return aliasIPs, nil
 						}
 						if isUpstreamNotFoundError(upstreamErr) {
 							logger.Debugf("Alias target %s has no %s record, returning empty answer", aliasTarget, queryType)
+							if ansCache != nil {
+								ansCache.set(time.Now(), ck, nil, true, cacheNegTTL)
+							}
 							return []string{}, nil
 						}
 						logger.Warn("Failed to resolve alias target %s for %s (%s): %v", aliasTarget, hostname, queryType, upstreamErr)
 					}
-
 					logger.Debugf("No match found in config hosts/alias for %s (%s)", hostname, queryType)
-				} else {
-					logger.Debugf("Config hosts not available, skipping priority 1")
-				}
-
-				// Priority 2: Check system hosts file (if enabled)
-				var entries []SystemHostsEntry
-				if v := systemHostsAtomic.Load(); v != nil {
-					if s, ok := v.([]SystemHostsEntry); ok {
-						entries = s
-					}
 				}
 
 				if len(entries) > 0 {
-					logger.Debugf("Checking system hosts for %s (%s), total entries: %d", hostname, queryType, len(entries))
-					ip, err := lookupSystemHosts(entries, hostname, typ)
-					if err == nil && ip != "" {
-						logger.Debugf("[channel: system.hosts] Resolved %s (%s) from system hosts -> %v", hostname, queryType, []string{ip})
-						return []string{ip}, nil
-					}
-
-					// Support alias target in system hosts:
-					// if hostname maps to an alias domain, resolve it via upstream.
 					aliasTarget, aliasErr := lookupSystemHostsAlias(entries, hostname)
 					if aliasErr == nil && aliasTarget != "" {
 						logger.Debugf("System hosts alias match for %s (%s): %s, querying upstream", hostname, queryType, aliasTarget)
@@ -741,21 +827,23 @@ func NewServerCommand() *cli.Command {
 						})
 						if upstreamErr == nil && len(aliasIPs) > 0 {
 							logger.Debugf("[channel: system.alias] Resolved %s (%s) via alias %s -> %v", hostname, queryType, aliasTarget, aliasIPs)
+							if ansCache != nil {
+								ansCache.set(time.Now(), ck, aliasIPs, false, cachePosTTL)
+							}
 							return aliasIPs, nil
 						}
 						if isUpstreamNotFoundError(upstreamErr) {
 							logger.Debugf("System alias target %s has no %s record, returning empty answer", aliasTarget, queryType)
+							if ansCache != nil {
+								ansCache.set(time.Now(), ck, nil, true, cacheNegTTL)
+							}
 							return []string{}, nil
 						}
 						logger.Warn("Failed to resolve system alias target %s for %s (%s): %v", aliasTarget, hostname, queryType, upstreamErr)
 					}
-
-					logger.Debugf("No match found in system hosts for %s (%s), error: %v", hostname, queryType, err)
-				} else {
-					logger.Debugf("System hosts not enabled or empty, skipping priority 2")
+					logger.Debugf("No match found in system hosts for %s (%s), error: %v", hostname, queryType, sysHostsLookupErr)
 				}
 
-				// Priority 3: Fallback to upstream DNS servers
 				logger.Debugf("Querying upstream DNS servers for %s (%s)", hostname, queryType)
 				ips, err := upstreamClient.LookUp(hostname, &client.LookUpOptions{
 					Typ: typ,
@@ -763,6 +851,9 @@ func NewServerCommand() *cli.Command {
 				if err != nil {
 					if isUpstreamNotFoundError(err) {
 						logger.Debugf("Upstream returned not found for %s (%s), returning empty answer", hostname, queryType)
+						if ansCache != nil {
+							ansCache.set(time.Now(), ck, nil, true, cacheNegTTL)
+						}
 						return []string{}, nil
 					}
 					logger.Error("Failed to resolve %s (%s) from upstream: %v", hostname, queryType, err)
@@ -771,8 +862,14 @@ func NewServerCommand() *cli.Command {
 
 				if len(ips) > 0 {
 					logger.Debugf("[channel: upstream] Resolved %s (%s) from upstream -> %v", hostname, queryType, ips)
+					if ansCache != nil {
+						ansCache.set(time.Now(), ck, ips, false, cachePosTTL)
+					}
 				} else {
 					logger.Debugf("No results found for %s (%s) from upstream", hostname, queryType)
+					if ansCache != nil {
+						ansCache.set(time.Now(), ck, nil, true, cacheNegTTL)
+					}
 				}
 				return ips, nil
 			})

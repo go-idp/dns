@@ -868,3 +868,69 @@ doq:
 		t.Error("Expected DoQ to be enabled")
 	}
 }
+
+func TestLoadConfig_Cache(t *testing.T) {
+	tmpDir := t.TempDir()
+	configFile := filepath.Join(tmpDir, "test.yaml")
+	configContent := `
+server:
+  port: 53
+cache:
+  enabled: true
+  positive_ttl: "5m"
+  negative_ttl: "30s"
+  max_entries: 500
+upstream:
+  servers:
+    - "127.0.0.1:53"
+`
+	if err := os.WriteFile(configFile, []byte(configContent), 0644); err != nil {
+		t.Fatalf("Failed to write config file: %v", err)
+	}
+	cfg, err := LoadConfig(configFile)
+	if err != nil {
+		t.Fatalf("Failed to load config: %v", err)
+	}
+	if !cfg.Cache.Enabled {
+		t.Fatal("expected cache enabled")
+	}
+	if cfg.Cache.PositiveTTL != "5m" {
+		t.Fatalf("positive_ttl: %q", cfg.Cache.PositiveTTL)
+	}
+	if cfg.Cache.NegativeTTL != "30s" {
+		t.Fatalf("negative_ttl: %q", cfg.Cache.NegativeTTL)
+	}
+	if cfg.Cache.MaxEntries != 500 {
+		t.Fatalf("max_entries: %d", cfg.Cache.MaxEntries)
+	}
+}
+
+func TestLoadConfig_CacheDefaultsWhenEnabledOnly(t *testing.T) {
+	tmpDir := t.TempDir()
+	configFile := filepath.Join(tmpDir, "test.yaml")
+	configContent := `
+server:
+  port: 53
+cache:
+  enabled: true
+upstream:
+  servers:
+    - "127.0.0.1:53"
+`
+	if err := os.WriteFile(configFile, []byte(configContent), 0644); err != nil {
+		t.Fatalf("Failed to write config file: %v", err)
+	}
+	cfg, err := LoadConfig(configFile)
+	if err != nil {
+		t.Fatalf("Failed to load config: %v", err)
+	}
+	if cfg.Cache.PositiveTTL != DNSCachePositiveTTLDefault {
+		t.Fatalf("positive_ttl got %q want %q", cfg.Cache.PositiveTTL, DNSCachePositiveTTLDefault)
+	}
+	if cfg.Cache.NegativeTTL != DNSCacheNegativeTTLDefault {
+		t.Fatalf("negative_ttl got %q want %q", cfg.Cache.NegativeTTL, DNSCacheNegativeTTLDefault)
+	}
+	if cfg.Cache.MaxEntries != DNSCacheMaxEntriesDefault {
+		t.Fatalf("max_entries got %d want %d", cfg.Cache.MaxEntries, DNSCacheMaxEntriesDefault)
+	}
+}
