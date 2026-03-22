@@ -84,6 +84,13 @@ This project follows the [Google Commit Message Convention](https://google.githu
 
 ### Code Style
 - Follow Go standard formatting (`gofmt`)
+- **CI enforces `goimports`**: the workflow runs `test -z "$(goimports -l .)"` (see `.github/workflows/ci.yml`). If CI fails on imports/formatting, fix locally with:
+  ```bash
+  go install golang.org/x/tools/cmd/goimports@latest
+  goimports -w .
+  test -z "$(goimports -l .)"   # should print nothing
+  ```
+  `goimports` applies `gofmt` rules plus import grouping; small diffs (struct field alignment, `a*b` spacing in tests) are enough to fail the check.
 - Use meaningful variable and function names
 - Add comments for exported functions and types
 - Keep functions focused and small
@@ -136,6 +143,17 @@ The project uses GitHub Actions for:
 - Continuous Integration (`.github/workflows/ci.yml`)
 - Docker builds (`.github/workflows/docker.yml`)
 - Releases (`.github/workflows/release.yml`)
+
+### CI checks (`ci.yml`)
+
+Before opening a PR or pushing to `master`, align with the **static analysis** job:
+
+1. `golint -set_exit_status`
+2. `go vet`
+3. **`test -z "$(goimports -l .)"`** — no file may need reformatting by `goimports`
+4. Tests via `goveralls` (coverage)
+
+Redis is started for tests that need it; `go mod tidy` runs in the install step.
 
 ## Version Management
 
