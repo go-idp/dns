@@ -36,6 +36,10 @@ upstream:
     - "8.8.8.8:53"
     - "tls://1.1.1.1"
   timeout: "5s"
+
+# Optional: cache upstream-derived answers (see Configuration guide)
+# cache:
+#   enabled: true
 ```
 
 ## Using Configuration File

@@ -119,12 +119,12 @@ TTL for DNS responses in seconds. Default: 500.
 dns server --port 53 --ttl 300
 ```
 
-### `--system-hosts-disabled`
+### `--disable-system-hosts`
 
 Disable system hosts file lookup.
 
 ```bash
-dns server --port 53 --system-hosts-disabled
+dns server --port 53 --disable-system-hosts
 ```
 
 ### `--system-hosts-file`
@@ -134,6 +134,27 @@ Path to system hosts file. Default: `/etc/hosts`.
 ```bash
 dns server --port 53 --system-hosts-file /custom/hosts
 ```
+
+### Response cache (upstream answers)
+
+Caches final A/AAAA answers that **required upstream** (including config/system **alias** chains). **Static** `hosts` and `/etc/hosts` **IP** hits are not cached and are always evaluated first.
+
+| Flag | Default | Description |
+|------|---------|-------------|
+| `--cache` | off | Enable cache (`DNS_CACHE=true`) |
+| `--no-cache` | — | Force disable even if `cache.enabled` in YAML |
+| `--cache-ttl` | `300s` | TTL when the answer has at least one IP (`DNS_CACHE_POSITIVE_TTL`) |
+| `--cache-negative-ttl` | `60s` | TTL for empty / NXDOMAIN-style answers (`DNS_CACHE_NEGATIVE_TTL`) |
+| `--cache-max-entries` | `10000` | Max entries (`DNS_CACHE_MAX_ENTRIES`) |
+
+With a config file, YAML `cache.*` overrides these defaults **unless** you set the corresponding flag explicitly on the CLI.
+
+```bash
+dns server --port 53 --upstream 8.8.8.8:53 --cache
+dns server --cache --cache-ttl 10m --cache-negative-ttl 120s
+```
+
+See [Configuration](/guide/configuration) for the `cache:` YAML block.
 
 ## Command Line Flags Override Config File
 

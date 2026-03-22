@@ -80,6 +80,13 @@ upstream:
     - "tls://1.1.1.1"         # Cloudflare DoT
     - "https://dns.adguard.com/dns-query"  # DoH
   timeout: "5s"              # Query timeout (default: 5s)
+
+# Optional: in-memory cache for answers that hit upstream (not static hosts IP hits)
+# cache:
+#   enabled: true
+#   positive_ttl: "300s"     # default if omitted when enabled
+#   negative_ttl: "60s"       # empty / NXDOMAIN-style answers
+#   max_entries: 10000
 ```
 
 ## Host Mappings
@@ -171,9 +178,23 @@ This matches domains like:
 
 DNS resolution follows this priority order:
 
-1. **Custom hosts** (from config file or command line)
-2. **System hosts file** (if enabled)
-3. **Upstream DNS servers**
+1. **Custom hosts** (from config file) — static IP mappings only
+2. **System hosts file** (if enabled) — static IP mappings only
+3. **Response cache** (if enabled) — only for names that still need upstream; see below
+4. **Custom hosts aliases** — resolve alias target via upstream
+5. **System hosts aliases** — resolve alias target via upstream
+6. **Upstream DNS servers**
+
+### Response cache
+
+When `cache.enabled: true` or `dns server --cache`:
+
+- After static `hosts` and `/etc/hosts` **direct IP** checks, the server may return a cached answer for the same name and query type (A vs AAAA).
+- **Positive cache**: at least one IP was returned; TTL defaults to **300s** unless overridden.
+- **Negative cache**: empty or NXDOMAIN-style result; TTL defaults to **60s** unless overridden.
+- Cached TTLs are **not** taken from upstream RR TTLs (the upstream client returns only IPs).
+
+CLI flags `--cache-ttl`, `--cache-negative-ttl`, and `--cache-max-entries` have defaults; if you pass them explicitly, they override YAML for those fields. Use `--no-cache` to disable caching even when the config enables it.
 
 ## Examples
 
